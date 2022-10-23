@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "CppUnitTest.h"
-#include "PlasmaServer.h"
+#include "Server.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace Plasma::Server;

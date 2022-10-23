@@ -5,7 +5,7 @@ using namespace std;
 
 namespace Plasma::Server
 {
-	class PlasmaServer
+	class Server
 	{
 	private:
 		Database::DatabaseDefinition* definition_;

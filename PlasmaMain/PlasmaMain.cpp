@@ -1,7 +1,7 @@
 #include <iostream>
 #include "..\PlasmaLibrary\ErrorNumber.h"
 #include "..\PlasmaLibrary\DatabaseDefinition.h"
-#include "PlasmaServer.h"
+#include "Server.h"
 #include <format>
 using namespace std;
 using namespace Plasma;
@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
         cout << "File name to save server config file: ";
         cin >> fileName;
 
-        Server::PlasmaServer* server = new Server::PlasmaServer();
+        Server::Server* server = new Server::Server();
         int response = server->CreateNew(&definition, fileName);
 
         if (response == ErrorNumber::Success)
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
     {
         cout << format("Starting server with configuration file: {0}\n", argv[1]);
 
-        Server::PlasmaServer* server = new Server::PlasmaServer();
+        Server::Server* server = new Server::Server();
         server->Start(argv[1]);
 
         return 0;

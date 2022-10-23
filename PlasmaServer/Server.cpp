@@ -5,7 +5,7 @@
 #include <boost\algorithm\string\trim.hpp>
 #include "..\PlasmaLibrary\DatabaseDefinitionKey.h"
 #include "..\PlasmaLibrary\magic_enum.hpp"
-#include "PlasmaServer.h"
+#include "Server.h"
 #include <format>
 
 using namespace std;
@@ -14,7 +14,7 @@ namespace Plasma::Server
 {
 	static Database::DatabaseDefinition* definition_;
 
-	const int PlasmaServer::CreateNew(Database::DatabaseDefinition* definition, string definitionFileName)
+	const int Server::CreateNew(Database::DatabaseDefinition* definition, string definitionFileName)
 	{
 		ofstream configStream;
 		configStream.open(definitionFileName, ofstream::out | ofstream::trunc);
@@ -32,7 +32,7 @@ namespace Plasma::Server
 		return 0;
 	}
 
-	const int PlasmaServer::Start(string definitionFileName)
+	const int Server::Start(string definitionFileName)
 	{
 		if (definition_ != NULL)
 			return ErrorNumber::AlreadyStarted;
@@ -57,7 +57,7 @@ namespace Plasma::Server
 		return ErrorNumber::Success;
 	}
 
-	const int PlasmaServer::SetDefinition(string line)
+	const int Server::SetDefinition(string line)
 	{
 		size_t split = line.find_first_of('=');
 
