@@ -10,7 +10,8 @@ namespace CS.PlasmaServer
         private DatabaseDefinition? definition_ = null;
         private Thread? t_ = null;
         private static bool stop_ = false;
-        private static UdpClient? client_ = null;
+        private static UdpClient? server_ = null;
+        private static Engine? instance_ = null;
 
         public Engine(DatabaseDefinition definition)
         {
@@ -19,12 +20,13 @@ namespace CS.PlasmaServer
                 throw new ArgumentNullException(nameof(definition));
             }
 
+            instance_ = this;
             definition_ = definition;
         }
 
         public void Start()
         {
-            client_ = new UdpClient(definition_!.UdpPort);
+            server_ = new UdpClient(definition_!.UdpPort);
 
             t_ = new Thread(new ThreadStart(Run));
             t_?.Start();
@@ -42,31 +44,32 @@ namespace CS.PlasmaServer
 
         public static void Run()
         {
-            IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
-
             while (!stop_)
             {
-                byte[]? bytesReceived = client_!.Receive(ref remoteEndpoint);
+                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
+                byte[]? bytesReceived = server_!.Receive(ref remoteEndpoint);
                 Console.WriteLine($"Received {bytesReceived?.Length} bytes from {remoteEndpoint}");
+
+                UdpClient responseClient = new UdpClient();
+                responseClient.Connect(remoteEndpoint);
+                byte[]? bytesReturned;
 
                 if (bytesReceived is not null)
                 {
-                    byte[]? bytesReturned = Process(bytesReceived!);
-                    if (bytesReturned is not null)
-                    {
-                        client_!.Send(bytesReturned);
-                    }
-                    else
+                    bytesReturned = Process(bytesReceived!);
+                    if (bytesReturned is null)
                     {
                         DatabaseResponse response = new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.CouldNotProcessCommand };
-                        client_!.Send(response.Bytes);
+                        bytesReturned = response.Bytes;
                     }
                 }
                 else
                 {
                     DatabaseResponse response = new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.NoBytesReceived };
-                    client_!.Send(response.Bytes);
+                    bytesReturned = response.Bytes;
                 }
+
+                server_.Send(bytesReturned, bytesReturned.Length, remoteEndpoint);
             }
         }
 
@@ -90,6 +93,11 @@ namespace CS.PlasmaServer
                 if (process?.DatabaseRequestType == request.DatabaseRequestType)
                 {
                     DatabaseResponse response = process.Process(request);
+                    if (response.DatabaseResponseType == DatabaseResponseType.Stopped)
+                    {
+                        instance_!.Stop();
+                    }
+
                     return response?.Bytes;
                 }
             }

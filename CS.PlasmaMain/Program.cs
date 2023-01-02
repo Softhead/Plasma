@@ -10,22 +10,22 @@ namespace CS.PlasmaMain
         {
             Console.WriteLine("Plasma Server");
 
-            if (args.Length < 2)
+            if (args.Length < 1)
             {
                 Console.WriteLine("Must specify filename for server configuration, or \"create\" to create a new server.");
                 Console.WriteLine("Aborting.");
                 return 0;
             }
 
-            if (string.Compare(args[1], "create", StringComparison.OrdinalIgnoreCase) == 0)
+            if (string.Compare(args[0], "create", StringComparison.OrdinalIgnoreCase) == 0)
             {
                 DatabaseDefinition definition = new DatabaseDefinition();
-                string fileName = null;
+                string? fileName = null;
 
                 Console.WriteLine("Create a new server.\n");
                 Console.WriteLine("Enter configuration parameters:");
 
-                Console.WriteLine("# of redundant copies (1-8): ");
+                Console.WriteLine("# of data copies (1-8): ");
                 definition.ServerCopyCount = ReadInt();
 
                 while (definition.ServerCommitCount < 1 || definition.ServerCommitCount > definition.ServerCopyCount)
@@ -65,7 +65,7 @@ namespace CS.PlasmaMain
                 definition.IpAddress = ReadIpAddress();
 
                 Console.WriteLine("File name to save server config file: ");
-                while (fileName == null || string.IsNullOrWhiteSpace(fileName))
+                while (fileName is null || string.IsNullOrWhiteSpace(fileName))
                 {
                     fileName = Console.ReadLine();
                 }
@@ -85,10 +85,10 @@ namespace CS.PlasmaMain
             }
             else
             {
-                Console.WriteLine($"Starting server with configuration file: {args[1]}");
+                Console.WriteLine($"Starting server with configuration file: {args[0]}");
 
                 Server server = new Server();
-                server.Start(args[1]);
+                server.Start(args[0]);
 
                 return 0;
             }

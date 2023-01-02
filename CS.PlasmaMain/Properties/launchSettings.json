@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "CS.PlasmaMain": {
+      "commandName": "Project",
+      "commandLineArgs": "local.cfg",
+      "workingDirectory": "C:\\db\\CS.PlasmaMain"
+    }
+  }
+}

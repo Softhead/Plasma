@@ -6,5 +6,7 @@
         Ping = 1,
         NoBytesReceived = 2,
         CouldNotProcessCommand = 3,
+        Started = 4,
+        Stopped = 5,
     }
 }

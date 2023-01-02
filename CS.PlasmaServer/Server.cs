@@ -1,11 +1,12 @@
 ﻿using CS.PlasmaLibrary;
+using System.Net;
 
 namespace CS.PlasmaServer
 {
     public class Server
     {
-        private DatabaseDefinition definition_ = null;
-        private Engine engine_ = null;
+        private DatabaseDefinition? definition_ = null;
+        private Engine? engine_ = null;
 
         public ErrorNumber CreateNew(DatabaseDefinition definition, string definitionFileName)
         {
@@ -29,7 +30,9 @@ namespace CS.PlasmaServer
         {
             if (definition_ is not null
                 && engine_ is not null)
+            {
                 return ErrorNumber.AlreadyStarted;
+            }
 
             if (definition_ is null)
             {
@@ -60,8 +63,11 @@ namespace CS.PlasmaServer
 
         public void Stop()
         {
-            engine_.Stop();
-            engine_ = null;
+            if (engine_ is not null)
+            {
+                engine_!.Stop();
+                engine_ = null;
+            }
         }
 
         private ErrorNumber SetDefinition(string line)
@@ -80,8 +86,8 @@ namespace CS.PlasmaServer
                 return ErrorNumber.ConfigNoKey;
             }
 
-            string key = line.Substring(0, split - 1).Trim();
-            string value = line.Substring(split).Trim();
+            string key = line.Substring(0, split).Trim();
+            string value = line.Substring(split + 1).Trim();
 
             if (!Enum.TryParse(typeof(DatabaseDefinitionKey), key, out object? definitionKey))
             {
@@ -89,42 +95,46 @@ namespace CS.PlasmaServer
                 return ErrorNumber.ConfigUnrecognizedKey;
             }
 
-            switch ((DatabaseDefinitionKey)definitionKey)
+            switch ((DatabaseDefinitionKey)definitionKey!)
             {
                 case DatabaseDefinitionKey.ServerCopyCount:
-                    definition_.ServerCopyCount = int.Parse(value);
+                    definition_!.ServerCopyCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.ServerCommitCount:
-                    definition_.ServerCommitCount = int.Parse(value);
+                    definition_!.ServerCommitCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.SlotPushPeriod:
-                    definition_.SlotPushPeriod = int.Parse(value);
+                    definition_!.SlotPushPeriod = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.SlotPushTriggerCount:
-                    definition_.SlotPushTriggerCount = int.Parse(value);
+                    definition_!.SlotPushTriggerCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.ClientQueryCount:
-                    definition_.ClientQueryCount = int.Parse(value);
+                    definition_!.ClientQueryCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.ClientCommitCount:
-                    definition_.ClientCommitCount = int.Parse(value);
+                    definition_!.ClientCommitCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.ServerCommitPeriod:
-                    definition_.ServerCommitPeriod = int.Parse(value);
+                    definition_!.ServerCommitPeriod = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.ServerCommitTriggerCount:
-                    definition_.ServerCommitTriggerCount = int.Parse(value);
+                    definition_!.ServerCommitTriggerCount = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.UdpPort:
-                    definition_.UdpPort = int.Parse(value);
+                    definition_!.UdpPort = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.IpAddress:
+                    definition_!.IpAddress = IPAddress.Parse(value);
                     break;
             }
 

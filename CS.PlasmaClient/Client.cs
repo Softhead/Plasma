@@ -6,8 +6,8 @@ namespace CS.PlasmaClient
 {
     public class Client : IDisposable
     {
-        private DatabaseDefinition definition_ = null;
-        private IPEndPoint endPoint_ = null;
+        private DatabaseDefinition? definition_ = null;
+        private IPEndPoint? endPoint_ = null;
 
         public Client(DatabaseDefinition definition)
         {
@@ -20,21 +20,30 @@ namespace CS.PlasmaClient
 
         public DatabaseResponse Request(DatabaseRequest request)
         {
-            byte[] requestData = request.Bytes;
-            byte[] responseData = Request(requestData);
-            if (responseData is not null)
+            if (request.DatabaseRequestType == DatabaseRequestType.Start)
             {
-                return new DatabaseResponse { Bytes = responseData };
-            }
+                // start server process
 
-            return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Invalid };
+                return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Started };
+            }
+            else
+            {
+                byte[] requestData = request.Bytes;
+                byte[] responseData = Request(requestData);
+                if (responseData is not null)
+                {
+                    return new DatabaseResponse { Bytes = responseData };
+                }
+
+                return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Invalid };
+            }
         }
 
-        public byte[] Request(byte[] data)
+        private byte[] Request(byte[] data)
         {
             if (endPoint_ is null)
             {
-                endPoint_ = new IPEndPoint(definition_.IpAddress, definition_.UdpPort);
+                endPoint_ = new IPEndPoint(definition_!.IpAddress!, definition_.UdpPort);
             }
 
             UdpClient client = new UdpClient();
