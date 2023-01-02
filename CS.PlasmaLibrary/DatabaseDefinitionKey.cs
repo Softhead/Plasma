@@ -9,6 +9,8 @@
         ClientQueryCount,
         ClientCommitCount,
         ServerCommitPeriod,
-        ServerCommitTriggerCount
+        ServerCommitTriggerCount,
+        UdpPort,
+        IpAddress
     };
 }

@@ -1,4 +1,6 @@
-﻿namespace CS.PlasmaLibrary
+﻿using System.Net;
+
+namespace CS.PlasmaLibrary
 {
     public class DatabaseDefinition
     {
@@ -10,5 +12,7 @@
         public int ClientCommitCount { get; set; }  // number of commits, 1 to ClientQueryCount;  defines the quorum count for the client to assume a commit
         public int ServerCommitPeriod { get; set; }  // milliseconds before scheduling a commit reconciliation
         public int ServerCommitTriggerCount { get; set; }  // number of commits that trigger a commit reconciliation
+        public int UdpPort { get; set; }  // UDP port number to bind to
+        public IPAddress? IpAddress { get; set; }  // IP address to bind to
     }
 }

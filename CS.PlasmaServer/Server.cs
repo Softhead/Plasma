@@ -5,6 +5,7 @@ namespace CS.PlasmaServer
     public class Server
     {
         private DatabaseDefinition definition_ = null;
+        private Engine engine_ = null;
 
         public ErrorNumber CreateNew(DatabaseDefinition definition, string definitionFileName)
         {
@@ -18,6 +19,7 @@ namespace CS.PlasmaServer
             s.WriteLine($"{DatabaseDefinitionKey.ClientCommitCount}={definition.ClientCommitCount}");
             s.WriteLine($"{DatabaseDefinitionKey.ServerCommitPeriod}={definition.ServerCommitPeriod}");
             s.WriteLine($"{DatabaseDefinitionKey.ServerCommitTriggerCount}={definition.ServerCommitTriggerCount}");
+            s.WriteLine($"{DatabaseDefinitionKey.UdpPort}={definition.UdpPort}");
 
             s.Close();
             return ErrorNumber.Success;
@@ -25,28 +27,41 @@ namespace CS.PlasmaServer
 
         public ErrorNumber Start(string definitionFileName)
         {
-            if (definition_ != null)
+            if (definition_ is not null
+                && engine_ is not null)
                 return ErrorNumber.AlreadyStarted;
 
-            definition_ = new DatabaseDefinition();
-
-            StreamReader s = File.OpenText(definitionFileName);
-
-            string? line = s.ReadLine();
-
-            while (line != null)
+            if (definition_ is null)
             {
-                ErrorNumber result = SetDefinition(line);
-                if (result != ErrorNumber.Success)
-                {
-                    definition_ = null;
-                    return result;
-                }
+                definition_ = new DatabaseDefinition();
 
-                line = s.ReadLine();
+                StreamReader s = File.OpenText(definitionFileName);
+
+                string? line = s.ReadLine();
+
+                while (line is not null)
+                {
+                    ErrorNumber result = SetDefinition(line);
+                    if (result != ErrorNumber.Success)
+                    {
+                        definition_ = null;
+                        return result;
+                    }
+
+                    line = s.ReadLine();
+                }
             }
 
+            engine_ = new Engine(definition_);
+            engine_.Start();
+
             return ErrorNumber.Success;
+        }
+
+        public void Stop()
+        {
+            engine_.Stop();
+            engine_ = null;
         }
 
         private ErrorNumber SetDefinition(string line)
@@ -107,30 +122,13 @@ namespace CS.PlasmaServer
                 case DatabaseDefinitionKey.ServerCommitTriggerCount:
                     definition_.ServerCommitTriggerCount = int.Parse(value);
                     break;
+
+                case DatabaseDefinitionKey.UdpPort:
+                    definition_.UdpPort = int.Parse(value);
+                    break;
             }
 
             return ErrorNumber.Success;
-        }
-
-        public static string GetErrorText(ErrorNumber errorNumber)
-        {
-            switch (errorNumber)
-            {
-                case ErrorNumber.Success:
-                    return ErrorMessage.Success;
-                case ErrorNumber.AlreadyStarted:
-                    return ErrorMessage.AlreadyStarted;
-                case ErrorNumber.InvalidConfiguration:
-                    return ErrorMessage.InvalidConfiguration;
-                case ErrorNumber.ConfigNoEquals:
-                    return ErrorMessage.ConfigNoEquals;
-                case ErrorNumber.ConfigNoKey:
-                    return ErrorMessage.ConfigNoKey;
-                case ErrorNumber.ConfigUnrecognizedKey:
-                    return ErrorMessage.ConfigUnrecognizedKey;
-            }
-
-            return $"Unrecognized error number: {(int)errorNumber}";
         }
     }
 }

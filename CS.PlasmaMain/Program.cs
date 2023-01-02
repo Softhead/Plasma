@@ -1,5 +1,6 @@
 ﻿using CS.PlasmaLibrary;
 using CS.PlasmaServer;
+using System.Net;
 
 namespace CS.PlasmaMain
 {
@@ -25,54 +26,43 @@ namespace CS.PlasmaMain
                 Console.WriteLine("Enter configuration parameters:");
 
                 Console.WriteLine("# of redundant copies (1-8): ");
-                int number;
-                string value = Console.ReadLine();
-                while (!int.TryParse(value, out number)) ;
-                definition.ServerCopyCount = number;
+                definition.ServerCopyCount = ReadInt();
 
                 while (definition.ServerCommitCount < 1 || definition.ServerCommitCount > definition.ServerCopyCount)
                 {
                     Console.WriteLine($"Quorum count for server to assume a commit (1-{definition.ServerCopyCount}): ");
-                    value = Console.ReadLine();
-                    while (!int.TryParse(value, out number)) ;
-                    definition.ServerCommitCount = number;
+                    definition.ServerCommitCount = ReadInt();
                 }
 
                 Console.WriteLine("Milliseconds before scheduling a slot push: ");
-                value = Console.ReadLine();
-                while (!int.TryParse(value, out number)) ;
-                definition.SlotPushPeriod = number;
+                definition.SlotPushPeriod = ReadInt();
 
                 Console.WriteLine("# of slot changes that trigger a slot data push: ");
-                value = Console.ReadLine();
-                while (!int.TryParse(value, out number)) ;
-                definition.SlotPushTriggerCount = number;
+                definition.SlotPushTriggerCount = ReadInt();
 
                 while (definition.ClientQueryCount < 1 || definition.ClientQueryCount > definition.ServerCopyCount)
                 {
                     Console.WriteLine($"Number of servers for the client to query (1-{definition.ServerCopyCount}): ");
-                    value = Console.ReadLine();
-                    while (!int.TryParse(value, out number)) ;
-                    definition.ClientQueryCount = number;
+                    definition.ClientQueryCount = ReadInt();
                 }
 
                 while (definition.ClientCommitCount < 1 || definition.ClientCommitCount > definition.ClientQueryCount)
                 {
                     Console.WriteLine($"Quorum count for the client to assume a commit (1-{definition.ClientQueryCount}): ");
-                    value = Console.ReadLine();
-                    while (!int.TryParse(value, out number)) ;
-                    definition.ClientCommitCount = number;
+                    definition.ClientCommitCount = ReadInt();
                 }
 
                 Console.WriteLine("Milliseconds before scheduling a commit reconciliation: ");
-                value = Console.ReadLine();
-                while (!int.TryParse(value, out number)) ;
-                definition.ServerCommitPeriod = number;
+                definition.ServerCommitPeriod = ReadInt();
 
                 Console.WriteLine("# of commits that trigger a commit reconciliation: ");
-                value = Console.ReadLine();
-                while (!int.TryParse(value, out number)) ;
-                definition.ServerCommitTriggerCount = number;
+                definition.ServerCommitTriggerCount = ReadInt();
+
+                Console.WriteLine("UDP port to bind to: ");
+                definition.UdpPort = ReadInt();
+
+                Console.WriteLine("IP address to bind to: ");
+                definition.IpAddress = ReadIpAddress();
 
                 Console.WriteLine("File name to save server config file: ");
                 while (fileName == null || string.IsNullOrWhiteSpace(fileName))
@@ -89,7 +79,7 @@ namespace CS.PlasmaMain
                 }
                 else
                 {
-                    Console.WriteLine($"Error creating server configuation: {Server.GetErrorText(response)}");
+                    Console.WriteLine($"Error creating server configuation: {ErrorMessage.GetErrorText(response)}");
                 }
                 return (int)response;
             }
@@ -102,6 +92,28 @@ namespace CS.PlasmaMain
 
                 return 0;
             }
+        }
+
+        private static int ReadInt()
+        {
+            int number;
+            string value = Console.ReadLine();
+            while (!int.TryParse(value, out number))
+            {
+                value = Console.ReadLine();
+            }
+            return number;
+        }
+
+        private static IPAddress ReadIpAddress()
+        {
+            IPAddress address;
+            string value = Console.ReadLine();
+            while (!IPAddress.TryParse(value, out address))
+            {
+                value = Console.ReadLine();
+            }
+            return address;
         }
     }
 }
