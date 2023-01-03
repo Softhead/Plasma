@@ -6,6 +6,8 @@ namespace CS.PlasmaCommandLineClient
 {
     internal class Program
     {
+        private static bool stillGoing_ = true;
+
         // usage: PlasmaCommandLineClient -server <server IP address> -port <server UDP port>
         static void Main(string[] args)
         {
@@ -23,23 +25,15 @@ namespace CS.PlasmaCommandLineClient
 
             using (Client client = new Client(definition))
             {
-                while (true)
+                while (stillGoing_)
                 {
                     Console.Write("Enter command: ");
                     string? command = Console.ReadLine()?.Trim();
 
-                    if (string.Compare("help", command, StringComparison.OrdinalIgnoreCase) == 0)
+                    DatabaseRequest? request = DecodeCommand(command);
+                    if (request is not null)
                     {
-                        PrintHelp();
-                    }
-                    else if (string.Compare("exit", command, StringComparison.OrdinalIgnoreCase) == 0)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        DatabaseRequest? request = DecodeCommand(command);
-                        if (request is not null)
+                        if (request.DatabaseRequestType != DatabaseRequestType.Invalid)
                         {
                             DatabaseResponse response = client.Request(request);
                             Console.WriteLine($"Response: {DecodeResponse(response)}");
@@ -68,8 +62,18 @@ namespace CS.PlasmaCommandLineClient
             {
                 return new DatabaseRequest { DatabaseRequestType = DatabaseRequestType.Stop };
             }
+            else if (string.Compare("help", command, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                PrintHelp();
+                return null;
+            }
+            else if (string.Compare("exit", command, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                stillGoing_ = false;
+                return null;
+            }
 
-            return null;
+            return new DatabaseRequest { DatabaseRequestType = DatabaseRequestType.Invalid };
         }
 
         private static string? DecodeResponse(DatabaseResponse response)
@@ -99,6 +103,7 @@ namespace CS.PlasmaCommandLineClient
             Console.WriteLine("ping");
             Console.WriteLine("stop");
             Console.WriteLine("start");
+            Console.WriteLine("exit");
         }
     }
 }
