@@ -26,6 +26,11 @@ namespace CS.PlasmaServer
             return ErrorNumber.Success;
         }
 
+        public bool? IsRunning
+        {
+            get => engine_?.IsRunning;
+        }
+
         public ErrorNumber Start(string definitionFileName)
         {
             if (definition_ is not null

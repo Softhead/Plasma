@@ -90,6 +90,12 @@ namespace CS.PlasmaMain
                 Server server = new Server();
                 server.Start(args[0]);
 
+                CancellationTokenSource source = new();
+                while (server.IsRunning is not null && (bool)server.IsRunning)
+                {
+                    source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+                }
+
                 return 0;
             }
         }
