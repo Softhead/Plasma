@@ -1,4 +1,5 @@
 ﻿using CS.PlasmaLibrary;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 
@@ -23,6 +24,18 @@ namespace CS.PlasmaClient
             if (request.DatabaseRequestType == DatabaseRequestType.Start)
             {
                 // start server process
+                Process process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "C:\\db\\CS.PlasmaMain\\bin\\Debug\\net6.0\\CS.PlasmaMain.exe",
+                        WorkingDirectory = "C:\\db\\CS.PlasmaMain",
+                        Arguments = "local.cfg",
+                        UseShellExecute = false,
+                        CreateNoWindow = false
+                    }
+                };
+                process.Start();
 
                 return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Started };
             }
