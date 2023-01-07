@@ -8,5 +8,7 @@
         CouldNotProcessCommand = 3,
         Started = 4,
         Stopped = 5,
+        Success = 6,
+        KeyNotFound = 7,
     }
 }

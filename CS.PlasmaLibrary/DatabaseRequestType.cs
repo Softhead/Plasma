@@ -6,5 +6,7 @@
         Ping = 1,
         Start = 2,
         Stop = 3,
+        Read = 4,
+        Write = 5,
     }
 }

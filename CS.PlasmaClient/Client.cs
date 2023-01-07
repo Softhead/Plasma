@@ -21,7 +21,7 @@ namespace CS.PlasmaClient
 
         public DatabaseResponse Request(DatabaseRequest request)
         {
-            if (request.DatabaseRequestType == DatabaseRequestType.Start)
+            if (request.MessageType == DatabaseRequestType.Start)
             {
                 // start server process
                 Process process = new Process
@@ -37,23 +37,28 @@ namespace CS.PlasmaClient
                 };
                 process.Start();
 
-                return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Started };
+                return new DatabaseResponse { MessageType = DatabaseResponseType.Started };
             }
             else
             {
-                byte[] requestData = request.Bytes;
-                byte[] responseData = Request(requestData);
+                byte[]? requestData = request.Bytes;
+                byte[]? responseData = Request(requestData);
                 if (responseData is not null)
                 {
                     return new DatabaseResponse { Bytes = responseData };
                 }
 
-                return new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Invalid };
+                return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
             }
         }
 
-        private byte[] Request(byte[] data)
+        private byte[]? Request(byte[]? data)
         {
+            if (data is null)
+            {
+                return null;
+            }
+
             if (endPoint_ is null)
             {
                 endPoint_ = new IPEndPoint(definition_!.IpAddress!, definition_.UdpPort);

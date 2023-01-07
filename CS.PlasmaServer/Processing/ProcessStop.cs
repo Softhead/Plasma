@@ -6,10 +6,10 @@ namespace CS.PlasmaServer
     {
         public DatabaseRequestType DatabaseRequestType => DatabaseRequestType.Stop;
 
-        public DatabaseResponse Process(DatabaseRequest request)
+        public DatabaseResponse? Process(Engine engine, DatabaseRequest request)
         {
-            DatabaseResponse response = new DatabaseResponse { DatabaseResponseType = DatabaseResponseType.Stopped };
-            return response;
+            engine.Stop();
+            return new DatabaseResponse { MessageType = DatabaseResponseType.Stopped };
         }
     }
 }
