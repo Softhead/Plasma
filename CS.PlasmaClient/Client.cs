@@ -1,7 +1,7 @@
 ﻿using CS.PlasmaLibrary;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 
 namespace CS.PlasmaClient
 {
@@ -9,52 +9,64 @@ namespace CS.PlasmaClient
     {
         private DatabaseDefinition? definition_ = null;
         private IPEndPoint? endPoint_ = null;
+        private static List<IDatabaseClientProcess?>? processors_ = null;
+        private DatabaseState? state_ = null;
 
-        public Client(DatabaseDefinition definition)
+        public Client()
         {
-            definition_ = definition;
         }
 
         public void Dispose()
         {
         }
 
-        public DatabaseResponse Request(DatabaseRequest request)
+        public DatabaseState State { get => state_; set => state_ = value; }
+
+        public ErrorNumber Start(string definitionFileName)
         {
-            if (request.MessageType == DatabaseRequestType.Start)
+            if (definition_ is not null)
             {
-                // start server process
-                Process process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "C:\\db\\CS.PlasmaMain\\bin\\Debug\\net6.0\\CS.PlasmaMain.exe",
-                        WorkingDirectory = "C:\\db\\CS.PlasmaMain",
-                        Arguments = "local.cfg",
-                        UseShellExecute = false,
-                        CreateNoWindow = false
-                    }
-                };
-                process.Start();
-
-                return new DatabaseResponse { MessageType = DatabaseResponseType.Started };
+                return ErrorNumber.AlreadyStarted;
             }
-            else
-            {
-                byte[]? requestData = request.Bytes;
-                byte[]? responseData = Request(requestData);
-                if (responseData is not null)
-                {
-                    return new DatabaseResponse { Bytes = responseData };
-                }
 
-                return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
-            }
+            definition_ = new DatabaseDefinition();
+            return definition_.LoadConfiguration(definitionFileName);
         }
 
-        private byte[]? Request(byte[]? data)
+        public DatabaseResponse? Request(DatabaseRequest request)
         {
-            if (data is null)
+            if (processors_ is null)
+            {
+                processors_ = Assembly.GetExecutingAssembly()
+                    .GetTypes()
+                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseClientProcess)))
+                    .Select(o => (IDatabaseClientProcess?)Activator.CreateInstance(o))
+                    .ToList();
+            }
+
+            foreach (IDatabaseClientProcess? processor in processors_)
+            {
+                if (processor?.DatabaseRequestType == request.MessageType)
+                {
+                    return processor.Process(this, request);
+                }
+            }
+
+            byte[]? requestData = request.Bytes;
+            byte[]? responseData = Request(requestData);
+            if (responseData is not null)
+            {
+                return new DatabaseResponse { Bytes = responseData };
+            }
+
+            return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
+        }
+
+        internal byte[]? Request(byte[]? data)
+        {
+            if (data is null
+                || definition_ is null
+                || definition_.IpAddress is null)
             {
                 return null;
             }
@@ -64,11 +76,15 @@ namespace CS.PlasmaClient
                 endPoint_ = new IPEndPoint(definition_!.IpAddress!, definition_.UdpPort);
             }
 
-            UdpClient client = new UdpClient();
-            client.Connect(endPoint_);
-            client.Send(data, data.Length);
+            Barrier barrier = new Barrier(definition_.ClientCommitCount);
+            for (int index = 0; index < definition_.ClientQueryCount; index++)
+            {
+                UdpClient client = new UdpClient();
+                client.Connect(endPoint_);
+                client.Send(data, data.Length);
 
-            data = client.Receive(ref endPoint_);
+                data = client.Receive(ref endPoint_);
+            }
 
             return data;
         }

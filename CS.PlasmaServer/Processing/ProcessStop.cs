@@ -2,7 +2,7 @@
 
 namespace CS.PlasmaServer
 {
-    internal class ProcessStop : IDatabaseProcess
+    internal class ProcessStop : IDatabaseServerProcess
     {
         public DatabaseRequestType DatabaseRequestType => DatabaseRequestType.Stop;
 

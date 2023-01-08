@@ -2,7 +2,8 @@
   "profiles": {
     "CS.PlasmaCommandLineClient": {
       "commandName": "Project",
-      "commandLineArgs": "-server 127.0.0.1 -port 5000"
+      "commandLineArgs": "local.cfg",
+      "workingDirectory": "C:\\db\\CS.PlasmaCommandLineClient"
     }
   }
 }

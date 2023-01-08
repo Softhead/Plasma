@@ -4,6 +4,7 @@ namespace CS.PlasmaLibrary
 {
     public class DatabaseDefinition
     {
+        public int ServerCount { get; set; }  // number of servers
         public int ServerCopyCount { get; set; }  // number of copies of data, 1 to 8;  2 or more creates redundancy
         public int ServerCommitCount { get; set; }  // number of commits, 1 to NumberOfCopy;  defines the quorum count for the server to assume a commit
         public int SlotPushPeriod { get; set; }  // milliseconds before scheduling a slot data push, if SlotPushTriggerCount has not been met
@@ -14,5 +15,105 @@ namespace CS.PlasmaLibrary
         public int ServerCommitTriggerCount { get; set; }  // number of commits that trigger a commit reconciliation
         public int UdpPort { get; set; }  // UDP port number to bind to
         public IPAddress? IpAddress { get; set; }  // IP address to bind to
+
+        public ErrorNumber LoadConfiguration(string? definitionFileName)
+        {
+            if (definitionFileName is null)
+            {
+                return ErrorNumber.ConfigFileMissing;
+            }
+
+            StreamReader s = File.OpenText(definitionFileName);
+
+            string? line = s.ReadLine();
+
+            while (line is not null)
+            {
+                ErrorNumber result = SetDefinition(line);
+                if (result != ErrorNumber.Success)
+                {
+                    return result;
+                }
+
+                line = s.ReadLine();
+            }
+
+            return ErrorNumber.Success;
+        }
+
+        private ErrorNumber SetDefinition(string line)
+        {
+            int split = line.IndexOf('=');
+
+            if (split == -1)
+            {
+                ErrorMessage.ContextualMessage = "No '=' found on line: " + line;
+                return ErrorNumber.ConfigNoEquals;
+            }
+
+            if (split == 0)
+            {
+                ErrorMessage.ContextualMessage = "No key found to left of '=' on line: " + line;
+                return ErrorNumber.ConfigNoKey;
+            }
+
+            string key = line.Substring(0, split).Trim();
+            string value = line.Substring(split + 1).Trim();
+
+            if (!Enum.TryParse(typeof(DatabaseDefinitionKey), key, out object? definitionKey))
+            {
+                ErrorMessage.ContextualMessage = "Unrecognized key: " + key;
+                return ErrorNumber.ConfigUnrecognizedKey;
+            }
+
+            switch ((DatabaseDefinitionKey)definitionKey!)
+            {
+                case DatabaseDefinitionKey.ServerCount:
+                    ServerCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ServerCopyCount:
+                    ServerCopyCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ServerCommitCount:
+                    ServerCommitCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.SlotPushPeriod:
+                    SlotPushPeriod = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.SlotPushTriggerCount:
+                    SlotPushTriggerCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ClientQueryCount:
+                    ClientQueryCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ClientCommitCount:
+                    ClientCommitCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ServerCommitPeriod:
+                    ServerCommitPeriod = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.ServerCommitTriggerCount:
+                    ServerCommitTriggerCount = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.UdpPort:
+                    UdpPort = int.Parse(value);
+                    break;
+
+                case DatabaseDefinitionKey.IpAddress:
+                    IpAddress = IPAddress.Parse(value);
+                    break;
+            }
+
+            return ErrorNumber.Success;
+        }
     }
 }

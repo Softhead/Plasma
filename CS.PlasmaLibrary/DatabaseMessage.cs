@@ -26,7 +26,7 @@
                 {
                     bytes_ = new byte[1];
                 }
-                bytes_[0] = (byte)(object)value;
+                bytes_[0] = (byte)(int)(object)value;
             }
         }
 

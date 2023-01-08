@@ -1,47 +1,20 @@
 ﻿using CS.PlasmaLibrary;
-using System.Collections;
 using System.Net.Sockets;
 using System.Reflection;
 
 namespace CS.PlasmaServer
 {
-    public class StructuralEqualityComparer<T> : IEqualityComparer<T>
-    {
-        public bool Equals(T? x, T? y)
-        {
-            return StructuralComparisons.StructuralEqualityComparer.Equals(x, y);
-        }
-
-        public int GetHashCode(T? obj)
-        {
-            return StructuralComparisons.StructuralEqualityComparer.GetHashCode(obj!);
-        }
-
-        private static StructuralEqualityComparer<T>? defaultComparer;
-        public static StructuralEqualityComparer<T> Default
-        {
-            get
-            {
-                StructuralEqualityComparer<T>? comparer = defaultComparer;
-                if (comparer == null)
-                {
-                    comparer = new StructuralEqualityComparer<T>();
-                    defaultComparer = comparer;
-                }
-                return comparer;
-            }
-        }
-    }
-
     internal class Engine
     {
         private DatabaseDefinition? definition_ = null;
+        private DatabaseState? state_ = null;
         private Task? task_ = null;
         private static bool isRunning_ = false;
         private static UdpClient? server_ = null;
         private static Engine? instance_ = null;
         private static CancellationTokenSource? source_ = null;
         private static Dictionary<byte[], byte[]>? dictionary_ = null;
+        private static List<IDatabaseServerProcess?>? processors_ = null;
 
         public Engine(DatabaseDefinition definition)
         {
@@ -54,10 +27,11 @@ namespace CS.PlasmaServer
             definition_ = definition;
         }
 
-        public bool IsRunning
-        {
-            get => isRunning_;
-        }
+        public bool IsRunning { get => isRunning_; }
+
+        public DatabaseState? State { get => state_; set => state_ = value; }
+
+        public Dictionary<byte[], byte[]>? Dictionary { get => dictionary_; set => dictionary_ = value; }
 
         public void Start()
         {
@@ -120,6 +94,7 @@ namespace CS.PlasmaServer
                 }
 
                 _ = server_!.SendAsync(bytesReturned!, bytesReturned!.Length, result.RemoteEndPoint);
+                Console.WriteLine($"Sent {bytesReturned.Length} bytes to {result.RemoteEndPoint}");
             }
 
             _ = Task.Run(() =>
@@ -128,63 +103,24 @@ namespace CS.PlasmaServer
             });
         }
 
-        public ReadOnlySpan<byte> Read(ReadOnlySpan<byte> key)
-        {
-            byte[]? value;
-            byte[] keyArray = key.ToArray();
-            if (dictionary_!.TryGetValue(keyArray, out value))
-            {
-                Span<byte> result = new byte[value.Length + 1].AsSpan();
-                result[0] = (byte)DatabaseResponseType.Success;
-                value.CopyTo(result.Slice(1));
-                return result;
-            }
-            else
-            {
-                Span<byte> result = new byte[1].AsSpan();
-                result[0] = (byte)DatabaseResponseType.KeyNotFound;
-                return result;
-            }
-        }
-
-        public ReadOnlySpan<byte> Write(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value)
-        {
-            byte[] keyArray = key.ToArray();
-            byte[] valueArray = value.ToArray();
-            if (dictionary_!.ContainsKey(keyArray))
-            {
-                dictionary_[keyArray] = valueArray;
-            }
-            else
-            {
-                dictionary_.Add(keyArray, valueArray);
-            }
-
-            Span<byte> result = new byte[1].AsSpan();
-            result[0] = (byte)DatabaseResponseType.Success;
-            return result;
-        }
-
-        private static List<IDatabaseProcess?>? process_ = null;
-
         private static byte[]? Process(byte[] bytes)
         {
             DatabaseRequest request = new DatabaseRequest { Bytes = bytes! };
 
-            if (process_ is null)
+            if (processors_ is null)
             {
-                process_ = Assembly.GetExecutingAssembly()
+                processors_ = Assembly.GetExecutingAssembly()
                     .GetTypes()
-                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseProcess)))
-                    .Select(o => (IDatabaseProcess?)Activator.CreateInstance(o))
+                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseServerProcess)))
+                    .Select(o => (IDatabaseServerProcess?)Activator.CreateInstance(o))
                     .ToList();
             }
 
-            foreach (IDatabaseProcess? process in process_)
+            foreach (IDatabaseServerProcess? processor in processors_)
             {
-                if (process?.DatabaseRequestType == request.MessageType)
+                if (processor?.DatabaseRequestType == request.MessageType)
                 {
-                    DatabaseResponse? response = process.Process(instance_!, request);
+                    DatabaseResponse? response = processor.Process(instance_!, request);
                     return response?.Bytes;
                 }
             }

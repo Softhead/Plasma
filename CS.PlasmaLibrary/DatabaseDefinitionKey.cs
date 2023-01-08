@@ -2,6 +2,7 @@
 {
     public enum DatabaseDefinitionKey
     {
+        ServerCount,
         ServerCopyCount,
         ServerCommitCount,
         SlotPushPeriod,

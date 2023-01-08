@@ -7,26 +7,29 @@
         public const string Success = "Success";
         public const string AlreadyStarted = "The database engine is already running.";
         public const string InvalidConfiguration = "There is an error in the database configuration.";
+        public const string CopyNumberOutOfRange = "The copy number is out of range.";
+        public const string ConfigUnrecognizedKey = "Unrecognized key in configuration.";
         public const string ConfigNoEquals = "No equals in configuration.";
         public const string ConfigNoKey = "No key in configuration.";
-        public const string ConfigUnrecognizedKey = "Unrecognized key in configuration.";
 
         public static string GetErrorText(ErrorNumber errorNumber)
         {
             switch (errorNumber)
             {
                 case ErrorNumber.Success:
-                    return ErrorMessage.Success;
+                    return Success;
                 case ErrorNumber.AlreadyStarted:
-                    return ErrorMessage.AlreadyStarted;
+                    return AlreadyStarted;
                 case ErrorNumber.InvalidConfiguration:
-                    return ErrorMessage.InvalidConfiguration;
+                    return InvalidConfiguration;
+                case ErrorNumber.CopyNumberOutOfRange:
+                    return CopyNumberOutOfRange;
                 case ErrorNumber.ConfigNoEquals:
-                    return ErrorMessage.ConfigNoEquals;
+                    return ConfigNoEquals;
                 case ErrorNumber.ConfigNoKey:
-                    return ErrorMessage.ConfigNoKey;
+                    return ConfigNoKey;
                 case ErrorNumber.ConfigUnrecognizedKey:
-                    return ErrorMessage.ConfigUnrecognizedKey;
+                    return ConfigUnrecognizedKey;
             }
 
             return $"Unrecognized error number: {(int)errorNumber}";
