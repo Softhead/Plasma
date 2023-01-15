@@ -2,7 +2,7 @@
 
 namespace CS.PlasmaServer
 {
-    internal class ProcessPing : IDatabaseProcess
+    internal class ProcessPing : IDatabaseServerProcess
     {
         public DatabaseRequestType DatabaseRequestType => DatabaseRequestType.Ping;
 

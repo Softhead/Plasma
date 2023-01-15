@@ -2,7 +2,7 @@
 
 namespace CS.PlasmaServer
 {
-    internal interface IDatabaseProcess
+    internal interface IDatabaseServerProcess
     {
         public DatabaseRequestType DatabaseRequestType { get; }
         public DatabaseResponse? Process(Engine engine, DatabaseRequest request);

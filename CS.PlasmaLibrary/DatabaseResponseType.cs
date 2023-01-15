@@ -10,5 +10,6 @@
         Stopped = 5,
         Success = 6,
         KeyNotFound = 7,
+        QuorumFailed = 8,
     }
 }

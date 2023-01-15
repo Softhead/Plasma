@@ -3,6 +3,6 @@
     public struct DatabaseSlotInfo
     {
         public int SlotNumber;
-        public int CopyNumber;  // 0 based current copy count
+        public byte CopyNumber;  // 0 based current copy count
     };
 }

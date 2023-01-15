@@ -1,13 +1,8 @@
 ﻿using CS.PlasmaLibrary;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CS.PlasmaServer
 {
-    internal class ProcessWrite : IDatabaseProcess
+    internal class ProcessWrite : IDatabaseServerProcess
     {
         public DatabaseRequestType DatabaseRequestType => DatabaseRequestType.Write;
 
@@ -28,8 +23,18 @@ namespace CS.PlasmaServer
 
             ReadOnlySpan<byte> key = bytes.Slice(0, indexComma);
             ReadOnlySpan<byte> value = bytes.Slice(indexComma + 1);
-            ReadOnlySpan<byte> data = engine.Write(key, value);
-            return new DatabaseResponse { Bytes = data.ToArray() };
+            byte[] keyArray = key.ToArray();
+            byte[] valueArray = value.ToArray();
+            if (engine.Dictionary!.ContainsKey(keyArray))
+            {
+                engine.Dictionary[keyArray] = valueArray;
+            }
+            else
+            {
+                engine.Dictionary.Add(keyArray, valueArray);
+            }
+
+            return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
         }
     }
 }

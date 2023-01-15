@@ -8,6 +8,7 @@
         CopyNumberOutOfRange = 3,
         ConfigUnrecognizedKey = 4,
         ConfigNoEquals = 5,
-        ConfigNoKey = 6
+        ConfigNoKey = 6,
+        ConfigFileMissing = 7,
     }
 }

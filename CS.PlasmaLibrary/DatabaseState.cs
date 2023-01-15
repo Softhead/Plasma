@@ -2,14 +2,16 @@
 {
     public class DatabaseState
     {
-        private DatabaseDefinition definition_;
+        private DatabaseDefinition? definition_ = null;
         private DatabaseSlot[] slots_;
 
-        public DatabaseState(DatabaseDefinition definition)
+        public DatabaseState(DatabaseDefinition? definition)
         {
             definition_ = definition;
             slots_ = new DatabaseSlot[Constant.SlotCount];
         }
+
+        public DatabaseSlot[] Slots { get => slots_; }
 
         // FindNextCopySlot
         // inputs:
@@ -33,10 +35,17 @@
         //
         public ErrorNumber FindNextCopySlot(DatabaseSlotInfo currentSlotInfo, ref DatabaseSlotInfo nextSlotInfo)
         {
-            if (currentSlotInfo.CopyNumber == definition_.ServerCopyCount - 1)
-                return ErrorNumber.CopyNumberOutOfRange;
+            if (definition_ is null)
+            {
+                return ErrorNumber.InvalidConfiguration;
+            }
 
-            nextSlotInfo.CopyNumber = currentSlotInfo.CopyNumber + 1;
+            if (currentSlotInfo.CopyNumber == definition_.ServerCopyCount - 1)
+            {
+                return ErrorNumber.CopyNumberOutOfRange;
+            }
+
+            nextSlotInfo.CopyNumber = (byte)(currentSlotInfo.CopyNumber + 1);
 
             switch (currentSlotInfo.CopyNumber)
             {
@@ -58,6 +67,34 @@
             }
 
             return ErrorNumber.Success;
+        }
+
+        public void SetupInitialSlots()
+        {
+            for (int index = 0; index < Constant.SlotCount; index++)
+            {
+                slots_[index] = new DatabaseSlot { ServerNumber = 255, VersionNumber = 0 };
+            }
+
+            DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
+            DatabaseSlotInfo nextSlotInfo = new DatabaseSlotInfo();
+            for (int index = 0; index < Constant.SlotCount; index++)
+            {
+                if (slots_[index].ServerNumber != 255)
+                {
+                    break;
+                }
+
+                int currentIndex = index;
+                for (byte replica = 0; replica < definition_!.ServerCopyCount; replica++)
+                {
+                    slots_[currentIndex].ServerNumber = replica;
+                    currentSlotInfo.SlotNumber = currentIndex;
+                    currentSlotInfo.CopyNumber = replica;
+                    FindNextCopySlot(currentSlotInfo, ref nextSlotInfo);
+                    currentIndex = nextSlotInfo.SlotNumber;
+                }
+            }
         }
     };
 }

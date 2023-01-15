@@ -90,6 +90,22 @@ namespace CS.PlasmaMain
                 Server server = new Server();
                 server.Start(args[0]);
 
+                DatabaseState state = new DatabaseState(server.Definition);
+                state.SetupInitialSlots();
+                server.State = state;
+
+                Server[] servers = new Server[server.Definition!.ServerCount];
+                servers[0] = server;
+                for (int index = 1; index < server.Definition!.ServerCount; index++)
+                {
+                    DatabaseDefinition definition = new DatabaseDefinition();
+                    definition.LoadConfiguration(args[0]);
+                    definition.UdpPort += index;
+                    servers[index] = new Server { Definition = definition };
+                    servers[index].Start();
+                    servers[index].State = state;
+                }
+
                 CancellationTokenSource source = new();
                 while (server.IsRunning is not null && (bool)server.IsRunning)
                 {
@@ -103,7 +119,7 @@ namespace CS.PlasmaMain
         private static int ReadInt()
         {
             int number;
-            string value = Console.ReadLine();
+            string? value = Console.ReadLine();
             while (!int.TryParse(value, out number))
             {
                 value = Console.ReadLine();
@@ -113,8 +129,8 @@ namespace CS.PlasmaMain
 
         private static IPAddress ReadIpAddress()
         {
-            IPAddress address;
-            string value = Console.ReadLine();
+            IPAddress? address;
+            string? value = Console.ReadLine();
             while (!IPAddress.TryParse(value, out address))
             {
                 value = Console.ReadLine();

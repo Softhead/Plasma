@@ -1,8 +1,6 @@
-﻿using System.Net;
-using System.Text;
-using System.Text.Unicode;
-using CS.PlasmaClient;
+﻿using CS.PlasmaClient;
 using CS.PlasmaLibrary;
+using System.Text;
 
 namespace CS.PlasmaCommandLineClient
 {
@@ -13,20 +11,17 @@ namespace CS.PlasmaCommandLineClient
         // usage: PlasmaCommandLineClient -server <server IP address> -port <server UDP port>
         static void Main(string[] args)
         {
-            if (args.Length != 4)
+            if (args.Length != 1)
             {
-                Console.WriteLine("usage: PlasmaCommandLineClient -server <server IP address> -port <server UDP port>");
+                Console.WriteLine("usage: PlasmaCommandLineClient <config file>");
                 return;
             }
             Console.WriteLine("For help, use command 'help'.\n");
 
-            IPAddress address = IPAddress.Parse(args[1]);
-            int port = int.Parse(args[3]);
-
-            DatabaseDefinition definition = new DatabaseDefinition { IpAddress = address, UdpPort = port };
-
-            using (Client client = new Client(definition))
+            using (Client client = new Client())
             {
+                client.Start(args[0]);
+
                 while (stillGoing_)
                 {
                     Console.Write("Enter command: ");
@@ -37,7 +32,7 @@ namespace CS.PlasmaCommandLineClient
                     {
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
-                            DatabaseResponse response = client.Request(request);
+                            DatabaseResponse? response = client.Request(request);
                             Console.WriteLine($"Response: {DecodeResponse(response)}");
                         }
                         else
@@ -94,6 +89,10 @@ namespace CS.PlasmaCommandLineClient
                 valueSpan.CopyTo(dataSpan.Slice(keyLength + 2));
                 return new DatabaseRequest { Bytes = dataSpan.ToArray() };
             }
+            else if (string.Compare("getstate", command, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                return new DatabaseRequest { MessageType = DatabaseRequestType.GetState };
+            }
             else if (string.Compare("help", command, StringComparison.OrdinalIgnoreCase) == 0)
             {
                 PrintHelp();
@@ -108,9 +107,9 @@ namespace CS.PlasmaCommandLineClient
             return new DatabaseRequest { MessageType = DatabaseRequestType.Invalid };
         }
 
-        private static string? DecodeResponse(DatabaseResponse response)
+        private static string? DecodeResponse(DatabaseResponse? response)
         {
-            switch (response.MessageType)
+            switch (response?.MessageType)
             {
                 case DatabaseResponseType.Invalid:
                     return "invalid";
@@ -128,6 +127,8 @@ namespace CS.PlasmaCommandLineClient
                     return DecodeSuccess(response);
                 case DatabaseResponseType.KeyNotFound:
                     return "key not found";
+                case DatabaseResponseType.QuorumFailed:
+                    return "quorum failed";
             }
 
             return null;
@@ -150,6 +151,9 @@ namespace CS.PlasmaCommandLineClient
             Console.WriteLine("ping");
             Console.WriteLine("stop");
             Console.WriteLine("start");
+            Console.WriteLine("read");
+            Console.WriteLine("write");
+            Console.WriteLine("getstate");
             Console.WriteLine("exit");
         }
     }

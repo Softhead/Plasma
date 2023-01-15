@@ -1,5 +1,4 @@
 ﻿using CS.PlasmaLibrary;
-using System.Net;
 
 namespace CS.PlasmaServer
 {
@@ -7,6 +6,23 @@ namespace CS.PlasmaServer
     {
         private DatabaseDefinition? definition_ = null;
         private Engine? engine_ = null;
+        private DatabaseState? state_ = null;
+
+        public DatabaseDefinition? Definition { get => definition_; set => definition_ = value; }
+
+        public DatabaseState? State
+        {
+            get => state_;
+
+            set
+            {
+                state_ = value;
+                if (engine_ is not null)
+                {
+                    engine_.State = value;
+                }
+            }
+        }
 
         public ErrorNumber CreateNew(DatabaseDefinition definition, string definitionFileName)
         {
@@ -31,7 +47,7 @@ namespace CS.PlasmaServer
             get => engine_?.IsRunning;
         }
 
-        public ErrorNumber Start(string definitionFileName)
+        public ErrorNumber Start(string? definitionFileName = null)
         {
             if (definition_ is not null
                 && engine_ is not null)
@@ -42,21 +58,10 @@ namespace CS.PlasmaServer
             if (definition_ is null)
             {
                 definition_ = new DatabaseDefinition();
-
-                StreamReader s = File.OpenText(definitionFileName);
-
-                string? line = s.ReadLine();
-
-                while (line is not null)
+                ErrorNumber loadResult = definition_.LoadConfiguration(definitionFileName);
+                if (loadResult != ErrorNumber.Success)
                 {
-                    ErrorNumber result = SetDefinition(line);
-                    if (result != ErrorNumber.Success)
-                    {
-                        definition_ = null;
-                        return result;
-                    }
-
-                    line = s.ReadLine();
+                    return loadResult;
                 }
             }
 
@@ -73,77 +78,6 @@ namespace CS.PlasmaServer
                 engine_!.Stop();
                 engine_ = null;
             }
-        }
-
-        private ErrorNumber SetDefinition(string line)
-        {
-            int split = line.IndexOf('=');
-
-            if (split == -1)
-            {
-                ErrorMessage.ContextualMessage = "No '=' found on line: " + line;
-                return ErrorNumber.ConfigNoEquals;
-            }
-
-            if (split == 0)
-            {
-                ErrorMessage.ContextualMessage = "No key found to left of '=' on line: " + line;
-                return ErrorNumber.ConfigNoKey;
-            }
-
-            string key = line.Substring(0, split).Trim();
-            string value = line.Substring(split + 1).Trim();
-
-            if (!Enum.TryParse(typeof(DatabaseDefinitionKey), key, out object? definitionKey))
-            {
-                ErrorMessage.ContextualMessage = "Unrecognized key: " + key;
-                return ErrorNumber.ConfigUnrecognizedKey;
-            }
-
-            switch ((DatabaseDefinitionKey)definitionKey!)
-            {
-                case DatabaseDefinitionKey.ServerCopyCount:
-                    definition_!.ServerCopyCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.ServerCommitCount:
-                    definition_!.ServerCommitCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.SlotPushPeriod:
-                    definition_!.SlotPushPeriod = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.SlotPushTriggerCount:
-                    definition_!.SlotPushTriggerCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.ClientQueryCount:
-                    definition_!.ClientQueryCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.ClientCommitCount:
-                    definition_!.ClientCommitCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.ServerCommitPeriod:
-                    definition_!.ServerCommitPeriod = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.ServerCommitTriggerCount:
-                    definition_!.ServerCommitTriggerCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.UdpPort:
-                    definition_!.UdpPort = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.IpAddress:
-                    definition_!.IpAddress = IPAddress.Parse(value);
-                    break;
-            }
-
-            return ErrorNumber.Success;
         }
     }
 }
