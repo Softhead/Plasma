@@ -114,11 +114,11 @@ namespace CS.PlasmaServer
                     .ToList();
             }
 
-            foreach (IDatabaseServerProcess? process in processors_)
+            foreach (IDatabaseServerProcess? processor in processors_)
             {
                 if (processor?.DatabaseRequestType == request.MessageType)
                 {
-                    DatabaseResponse? response = process.Process(instance, request);
+                    DatabaseResponse? response = processor.Process(instance, request);
                     return response?.Bytes;
                 }
             }
