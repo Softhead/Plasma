@@ -87,6 +87,7 @@ namespace CS.PlasmaMain
             {
                 Console.WriteLine($"Starting server with configuration file: {args[0]}");
 
+
                 Server server = new Server();
                 server.Start(args[0]);
 

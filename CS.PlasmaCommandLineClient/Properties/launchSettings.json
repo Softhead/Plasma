@@ -3,7 +3,7 @@
     "CS.PlasmaCommandLineClient": {
       "commandName": "Project",
       "commandLineArgs": "local.cfg",
-      "workingDirectory": "c:\\db\\CS.PlasmaCommandLineClient"
+      "workingDirectory": "C:\\db\\CS.PlasmaCommandLineClient"
     }
   }
 }

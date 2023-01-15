@@ -116,7 +116,7 @@ namespace CS.PlasmaServer
 
             foreach (IDatabaseServerProcess? process in processors_)
             {
-                if (process?.DatabaseRequestType == request.MessageType)
+                if (processor?.DatabaseRequestType == request.MessageType)
                 {
                     DatabaseResponse? response = process.Process(instance, request);
                     return response?.Bytes;
