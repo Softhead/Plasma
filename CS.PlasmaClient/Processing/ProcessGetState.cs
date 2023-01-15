@@ -8,22 +8,31 @@ namespace CS.PlasmaClient
 
         public DatabaseResponse? Process(Client client, DatabaseRequest request)
         {
-            byte[]? requestData = request.Bytes;
-            byte[]? responseData = client.Request(requestData);
-            if (responseData is not null)
+            if (client.State is null)
             {
-                if (responseData.Length == 1 + Constant.SlotCount * 2)
-                {
-                    for (int index = 0; index < Constant.SlotCount; index++)
-                    {
-                        client.State.Slots[index].ServerNumber = responseData[1 + index * 2];
-                        client.State.Slots[index].VersionNumber = responseData[2 + index * 2];
-                    }
-                    return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
-                }
+                client.State = new DatabaseState(client.Definition);
             }
 
-            return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
+
+            QuicConnection conn = new QuicConnection(client);
+
+
+            //byte[]? requestData = request.Bytes;
+            //byte[]? responseData = client.Request(requestData);
+            //if (responseData is not null)
+            //{
+            //    if (responseData.Length == 1 + Constant.SlotCount * 2)
+            //    {
+            //        for (int index = 0; index < Constant.SlotCount; index++)
+            //        {
+            //            client.State.Slots[index].ServerNumber = responseData[1 + index * 2];
+            //            client.State.Slots[index].VersionNumber = responseData[2 + index * 2];
+            //        }
+            //        return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
+            //    }
+            //}
+
+            //return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
     }
 }
