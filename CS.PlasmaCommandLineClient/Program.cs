@@ -32,7 +32,7 @@ namespace CS.PlasmaCommandLineClient
                     {
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
-                            DatabaseResponse response = client.Request(request);
+                            DatabaseResponse? response = client.Request(request);
                             Console.WriteLine($"Response: {DecodeResponse(response)}");
                         }
                         else
@@ -107,9 +107,9 @@ namespace CS.PlasmaCommandLineClient
             return new DatabaseRequest { MessageType = DatabaseRequestType.Invalid };
         }
 
-        private static string? DecodeResponse(DatabaseResponse response)
+        private static string? DecodeResponse(DatabaseResponse? response)
         {
-            switch (response.MessageType)
+            switch (response?.MessageType)
             {
                 case DatabaseResponseType.Invalid:
                     return "invalid";
@@ -127,6 +127,8 @@ namespace CS.PlasmaCommandLineClient
                     return DecodeSuccess(response);
                 case DatabaseResponseType.KeyNotFound:
                     return "key not found";
+                case DatabaseResponseType.QuorumFailed:
+                    return "quorum failed";
             }
 
             return null;
