@@ -9,10 +9,11 @@ namespace CS.PlasmaServer
         private DatabaseState? state_ = null;
 
         public DatabaseDefinition? Definition { get => definition_; set => definition_ = value; }
-        public DatabaseState? State 
-        { 
-            get => state_; 
-            
+
+        public DatabaseState? State
+        {
+            get => state_;
+
             set
             {
                 state_ = value;
@@ -20,7 +21,7 @@ namespace CS.PlasmaServer
                 {
                     engine_.State = value;
                 }
-            } 
+            }
         }
 
         public ErrorNumber CreateNew(DatabaseDefinition definition, string definitionFileName)

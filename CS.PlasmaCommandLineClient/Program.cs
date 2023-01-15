@@ -153,6 +153,7 @@ namespace CS.PlasmaCommandLineClient
             Console.WriteLine("start");
             Console.WriteLine("read");
             Console.WriteLine("write");
+            Console.WriteLine("getstate");
             Console.WriteLine("exit");
         }
     }

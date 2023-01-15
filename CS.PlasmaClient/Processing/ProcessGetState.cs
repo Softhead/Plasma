@@ -1,6 +1,6 @@
 ﻿using CS.PlasmaLibrary;
 
-namespace CS.PlasmaClient.Processing
+namespace CS.PlasmaClient
 {
     internal class ProcessGetState : IDatabaseClientProcess
     {
@@ -8,6 +8,11 @@ namespace CS.PlasmaClient.Processing
 
         public DatabaseResponse? Process(Client client, DatabaseRequest request)
         {
+            if (client.State is null)
+            {
+                client.State = new DatabaseState(client.Definition);
+            }
+
             byte[]? requestData = request.Bytes;
             byte[]? responseData = client.Request(requestData);
             if (responseData is not null)

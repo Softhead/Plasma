@@ -9,11 +9,10 @@ namespace CS.PlasmaServer
         private DatabaseDefinition? definition_ = null;
         private DatabaseState? state_ = null;
         private Task? task_ = null;
-        private static bool isRunning_ = false;
-        private static UdpClient? server_ = null;
-        private static Engine? instance_ = null;
-        private static CancellationTokenSource? source_ = null;
-        private static Dictionary<byte[], byte[]>? dictionary_ = null;
+        private bool isRunning_ = false;
+        private UdpClient? server_ = null;
+        private CancellationTokenSource? source_ = null;
+        private Dictionary<byte[], byte[]>? dictionary_ = null;
         private static List<IDatabaseServerProcess?>? processors_ = null;
 
         public Engine(DatabaseDefinition definition)
@@ -23,7 +22,6 @@ namespace CS.PlasmaServer
                 throw new ArgumentNullException(nameof(definition));
             }
 
-            instance_ = this;
             definition_ = definition;
         }
 
@@ -42,7 +40,7 @@ namespace CS.PlasmaServer
 
             task_ = Task.Run(() =>
             {
-                _ = Run();
+                _ = Run(this);
             });
         }
 
@@ -64,14 +62,14 @@ namespace CS.PlasmaServer
             source_ = null;
         }
 
-        public static async Task Run()
+        public static async Task Run(Engine instance)
         {
-            CancellationToken token = source_!.Token;
+            CancellationToken token = instance.source_!.Token;
 
-            while (isRunning_
+            while (instance.isRunning_
                 && !token.IsCancellationRequested)
             {
-                var result = await server_!.ReceiveAsync(token);
+                var result = await instance.server_!.ReceiveAsync(token);
                 token.ThrowIfCancellationRequested();
 
                 byte[] bytesReceived = result.Buffer;
@@ -80,7 +78,7 @@ namespace CS.PlasmaServer
                 byte[]? bytesReturned;
                 if (bytesReceived.Length > 0)
                 {
-                    bytesReturned = Process(bytesReceived!);
+                    bytesReturned = Process(instance, bytesReceived!);
                     if (bytesReturned is null)
                     {
                         DatabaseResponse response = new DatabaseResponse { MessageType = DatabaseResponseType.CouldNotProcessCommand };
@@ -93,17 +91,17 @@ namespace CS.PlasmaServer
                     bytesReturned = response.Bytes;
                 }
 
-                _ = server_!.SendAsync(bytesReturned!, bytesReturned!.Length, result.RemoteEndPoint);
+                _ = instance.server_!.SendAsync(bytesReturned!, bytesReturned!.Length, result.RemoteEndPoint);
                 Console.WriteLine($"Sent {bytesReturned.Length} bytes to {result.RemoteEndPoint}");
             }
 
             _ = Task.Run(() =>
             {
-                instance_!.Stop();
+                instance.Stop();
             });
         }
 
-        private static byte[]? Process(byte[] bytes)
+        private static byte[]? Process(Engine instance, byte[] bytes)
         {
             DatabaseRequest request = new DatabaseRequest { Bytes = bytes! };
 
@@ -116,11 +114,11 @@ namespace CS.PlasmaServer
                     .ToList();
             }
 
-            foreach (IDatabaseServerProcess? processor in processors_)
+            foreach (IDatabaseServerProcess? process in processors_)
             {
                 if (processor?.DatabaseRequestType == request.MessageType)
                 {
-                    DatabaseResponse? response = processor.Process(instance_!, request);
+                    DatabaseResponse? response = process.Process(instance, request);
                     return response?.Bytes;
                 }
             }
