@@ -13,26 +13,22 @@ namespace CS.PlasmaClient
                 client.State = new DatabaseState(client.Definition);
             }
 
+            byte[]? requestData = request.Bytes;
+            byte[]? responseData = client.Request(requestData);
+            if (responseData is not null)
+            {
+                if (responseData.Length == 1 + Constant.SlotCount * 2)
+                {
+                    for (int index = 0; index < Constant.SlotCount; index++)
+                    {
+                        client.State.Slots[index].ServerNumber = responseData[1 + index * 2];
+                        client.State.Slots[index].VersionNumber = responseData[2 + index * 2];
+                    }
+                    return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
+                }
+            }
 
-            QuicConnection conn = new QuicConnection(client);
-
-
-            //byte[]? requestData = request.Bytes;
-            //byte[]? responseData = client.Request(requestData);
-            //if (responseData is not null)
-            //{
-            //    if (responseData.Length == 1 + Constant.SlotCount * 2)
-            //    {
-            //        for (int index = 0; index < Constant.SlotCount; index++)
-            //        {
-            //            client.State.Slots[index].ServerNumber = responseData[1 + index * 2];
-            //            client.State.Slots[index].VersionNumber = responseData[2 + index * 2];
-            //        }
-            //        return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
-            //    }
-            //}
-
-            //return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
+            return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
     }
 }
