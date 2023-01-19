@@ -10,5 +10,6 @@
         ConfigNoEquals = 5,
         ConfigNoKey = 6,
         ConfigFileMissing = 7,
+        DefinitionNotSet = 8,
     }
 }

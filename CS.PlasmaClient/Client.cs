@@ -1,4 +1,5 @@
 ﻿using CS.PlasmaLibrary;
+using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -11,6 +12,7 @@ namespace CS.PlasmaClient
         private DatabaseDefinition? definition_ = null;
         private static List<IDatabaseClientProcess?>? processors_ = null;
         private DatabaseState? state_ = null;
+        private Dictionary<int, int> serverPortDictionary_ = new Dictionary<int, int>();
 
         public Client()
         {
@@ -24,6 +26,8 @@ namespace CS.PlasmaClient
 
         public DatabaseDefinition? Definition { get => definition_; }
 
+        public Dictionary<int, int> ServerPortDictionary { get => serverPortDictionary_; }
+
         public ErrorNumber Start(string definitionFileName)
         {
             if (definition_ is not null)
@@ -35,7 +39,7 @@ namespace CS.PlasmaClient
             return definition_.LoadConfiguration(definitionFileName);
         }
 
-        public DatabaseResponse? Request(DatabaseRequest request)
+        public async Task<DatabaseResponse?> Request(DatabaseRequest request)
         {
             if (processors_ is null)
             {
@@ -55,17 +59,17 @@ namespace CS.PlasmaClient
             //    }
             //}
 
-            return ProcessRequest(request);
+            return await ProcessRequest(request);
         }
 
-        private DatabaseResponse? ProcessRequest(DatabaseRequest request)
+        private async Task<DatabaseResponse?> ProcessRequest(DatabaseRequest request)
         {
 
             foreach (IDatabaseClientProcess? processor in processors_!)
             {
                 if (processor?.DatabaseRequestType == request.MessageType)
                 {
-                    return processor!.Process(this, request);
+                    return await processor!.ProcessAsync(this, request);
                 }
             }
 
@@ -90,7 +94,7 @@ namespace CS.PlasmaClient
             }
 
             Barrier? barrier = new Barrier(definition_.ClientCommitCount + 1);
-            ManualResetEvent manualEvent = new ManualResetEvent(false);
+            ManualResetEvent startAllRequestsEvent = new ManualResetEvent(false);
             Task[] tasks = new Task[definition_.ClientQueryCount];
             ConcurrentBag<byte[]?> responses = new ConcurrentBag<byte[]?>();
             DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
@@ -98,10 +102,10 @@ namespace CS.PlasmaClient
 
             for (byte index = 0; index < definition_.ClientQueryCount; index++)
             {
-                byte serverNumber = 0;// state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
+                byte serverNumber = index;// state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 tasks[index] = Task.Run(() =>
                     {
-                        manualEvent.WaitOne();
+                        startAllRequestsEvent.WaitOne();
                         responses.Add(RequestWithServer(data, serverNumber));
 
                         lock (this)
@@ -120,7 +124,7 @@ namespace CS.PlasmaClient
             // the number of tasks may exceed the barrier participant count
             // so after all the Tasks are created, then signal the event to cause them to start
             // as well, put any Barrier changes here or in the Tasks into a lock to prevent exceptions
-            manualEvent.Set();
+            startAllRequestsEvent.Set();
             barrier.SignalAndWait();
             lock (this)
             {
@@ -171,7 +175,9 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            IPEndPoint endPoint = new IPEndPoint(definition_!.IpAddress!, definition_.UdpPort + serverNumber);
+            int port = serverPortDictionary_[serverNumber];
+
+            IPEndPoint endPoint = new IPEndPoint(definition_!.IpAddress!, port);
             UdpClient client = new UdpClient();
             client.Connect(endPoint);
             client.Send(data, data.Length);

@@ -1,6 +1,8 @@
 ﻿using CS.PlasmaLibrary;
 using CS.PlasmaServer;
+using System.IO.MemoryMappedFiles;
 using System.Net;
+using System.Text;
 
 namespace CS.PlasmaMain
 {
@@ -87,9 +89,15 @@ namespace CS.PlasmaMain
             {
                 Console.WriteLine($"Starting server with configuration file: {args[0]}");
 
+                var message = new byte[20];
+                var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
+                var messageHandled = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_handled");
+                var mmf = MemoryMappedFile.CreateOrOpen("Plasma_mmf", message.Length);
+                var viewStream = mmf.CreateViewStream();
+
 
                 Server server = new Server();
-                server.Start(args[0]);
+                server.Start(0, args[0]);
 
                 DatabaseState state = new DatabaseState(server.Definition);
                 state.SetupInitialSlots();
@@ -103,8 +111,25 @@ namespace CS.PlasmaMain
                     definition.LoadConfiguration(args[0]);
                     definition.UdpPort += index;
                     servers[index] = new Server { Definition = definition };
-                    servers[index].Start();
+                    servers[index].Start(index);
                     servers[index].State = state;
+                }
+
+                for (int index = 0; index < server.Definition!.ServerCount; index++)
+                {
+                    Server serverLocal = servers[index];
+                    Task.Run(() =>
+                    {
+                        serverLocal.PortNumberEvent.WaitOne();
+                        Console.WriteLine($"Server: {serverLocal.ServerNumber} Port: {serverLocal.PortNumber}");
+
+                        messageHandled.WaitOne();
+                        string messageString = $"{serverLocal.ServerNumber} {serverLocal.PortNumber}";
+                        Encoding.UTF8.GetBytes(messageString).CopyTo(message.AsSpan());
+                        viewStream.Position = 0;
+                        viewStream.Write(message, 0, message.Length);
+                        messageWait.Set();
+                    });
                 }
 
                 CancellationTokenSource source = new();

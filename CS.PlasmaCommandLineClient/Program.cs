@@ -1,5 +1,6 @@
 ﻿using CS.PlasmaClient;
 using CS.PlasmaLibrary;
+using System.IO.MemoryMappedFiles;
 using System.Text;
 
 namespace CS.PlasmaCommandLineClient
@@ -9,7 +10,7 @@ namespace CS.PlasmaCommandLineClient
         private static bool stillGoing_ = true;
 
         // usage: PlasmaCommandLineClient -server <server IP address> -port <server UDP port>
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             if (args.Length != 1)
             {
@@ -18,7 +19,39 @@ namespace CS.PlasmaCommandLineClient
             }
             Console.WriteLine("For help, use command 'help'.\n");
 
-            using (Client client = new Client())
+            Client? client = null;
+            var message = new byte[20];
+            var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
+            var messageHandled = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_handled");
+            var mmf = MemoryMappedFile.CreateOrOpen("Plasma_mmf", message.Length);
+            var viewStream = mmf.CreateViewStream();
+            messageHandled.Set();
+
+            _ = Task.Run(() =>
+            {
+                while (true)
+                {
+                    messageWait.WaitOne();
+                    viewStream.Position = 0;
+                    viewStream.Read(message, 0, message.Length);
+
+                    // handle the message
+                    string messageString = Encoding.UTF8.GetString(message);
+                    string[] parts = messageString.Split(' ');
+                    if (int.TryParse(parts[0], out int server)
+                        && int.TryParse(parts[1], out int port))
+                    {
+                        while (client is null)
+                        {
+                            Thread.Sleep(TimeSpan.FromSeconds(1));
+                        }
+                        client.ServerPortDictionary.Add(server, port);
+                    }
+                    messageHandled.Set();
+                }
+            });
+
+            using (client = new Client())
             {
                 client.Start(args[0]);
 
@@ -32,7 +65,7 @@ namespace CS.PlasmaCommandLineClient
                     {
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
-                            DatabaseResponse? response = client.Request(request);
+                            DatabaseResponse? response = await client.Request(request);
                             Console.WriteLine($"Response: {DecodeResponse(response)}");
                         }
                         else

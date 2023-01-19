@@ -7,7 +7,7 @@ namespace CS.PlasmaClient
     {
         public DatabaseRequestType DatabaseRequestType => DatabaseRequestType.Start;
 
-        public DatabaseResponse? Process(Client client, DatabaseRequest request)
+        public async Task<DatabaseResponse?> ProcessAsync(Client client, DatabaseRequest request)
         {
             // start server process
             Process process = new Process
