@@ -18,7 +18,8 @@ namespace CS.PlasmaClient
 
             if (client is null
                 || client.Definition is null
-                || client.Definition.IpAddress is null)
+                || client.Definition.IpAddress is null
+                || request.Bytes is null)
             {
                 return null;
             }
@@ -63,8 +64,9 @@ namespace CS.PlasmaClient
             }
 
             stream.Close();
-            conn.CloseAsync(0x0c);
-            conn.DisposeAsync();
+            await stream.DisposeAsync();
+            await conn.CloseAsync(0x0c);
+            await conn.DisposeAsync();
 
             if (length == 1 + Constant.SlotCount * 2)
             {

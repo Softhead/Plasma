@@ -1,7 +1,8 @@
 ﻿using CS.PlasmaLibrary;
-using System;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Quic;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Reflection;
 
@@ -50,14 +51,14 @@ namespace CS.PlasmaClient
                     .ToList();
             }
 
-            //if (state_ is null)
-            //{
-            //    DatabaseResponse? responseGetState = ProcessRequest(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
-            //    if (responseGetState?.MessageType != DatabaseResponseType.Success)
-            //    {
-            //        return responseGetState;
-            //    }
-            //}
+            if (state_ is null)
+            {
+                DatabaseResponse? responseGetState = await ProcessRequest(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
+                if (responseGetState?.MessageType != DatabaseResponseType.Success)
+                {
+                    return responseGetState;
+                }
+            }
 
             return await ProcessRequest(request);
         }
@@ -87,8 +88,8 @@ namespace CS.PlasmaClient
         {
             if (data is null
                 || definition_ is null
-                || definition_.IpAddress is null)
- //               || state_ is null)
+                || definition_.IpAddress is null
+                || state_ is null)
             {
                 return null;
             }
@@ -103,10 +104,10 @@ namespace CS.PlasmaClient
             for (byte index = 0; index < definition_.ClientQueryCount; index++)
             {
                 byte serverNumber = index;// state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
-                tasks[index] = Task.Run(() =>
+                tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
-                        responses.Add(RequestWithServer(data, serverNumber));
+                        responses.Add(await RequestWithServerQuic(data, serverNumber));
 
                         lock (this)
                         {
@@ -183,6 +184,67 @@ namespace CS.PlasmaClient
             client.Send(data, data.Length);
 
             return client.Receive(ref endPoint);
+        }
+
+        private async Task<byte[]?> RequestWithServerQuic(byte[]? data, byte serverNumber)
+        {
+            if (Definition is null
+                || Definition.IpAddress is null
+                || data is null)
+            {
+                return null;
+            }
+
+            CancellationToken token = new CancellationToken();
+            int port = ServerPortDictionary[serverNumber];
+            IPEndPoint endpoint = new IPEndPoint(Definition.IpAddress, port);
+            QuicConnection conn = await QuicConnection.ConnectAsync(
+                new QuicClientConnectionOptions
+                {
+                    RemoteEndPoint = endpoint,
+                    DefaultCloseErrorCode = 0x0a,
+                    DefaultStreamErrorCode = 0x0b,
+                    ClientAuthenticationOptions = new SslClientAuthenticationOptions { ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 } },
+                    MaxInboundUnidirectionalStreams = 10,
+                    MaxInboundBidirectionalStreams = 100
+                }, token);
+            QuicStream stream = await conn.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+
+            // message format is 4 bytes message length, followed by data
+            byte[] buffer = new byte[data.Length + 4];
+            BitConverter.GetBytes(data.Length).CopyTo(buffer, 0);
+            data.CopyTo(buffer, 4);
+            await stream.WriteAsync(buffer, token);
+            stream.CompleteWrites();
+
+            // read response length
+            buffer = new byte[4];
+            await stream.ReadAsync(buffer, token);
+
+            // read the response
+            int length = BitConverter.ToInt32(buffer, 0);
+            buffer = new byte[length];
+            int received = 0;
+            bool stillGoing = true;
+            while (stillGoing)
+            {
+                int currentReceived = await stream.ReadAsync(buffer.AsMemory(received, length - received), token);
+                received += currentReceived;
+                if (received == length)
+                {
+                    stillGoing = false;
+                }
+            }
+
+            _ = Task.Run(async () =>
+            {
+                stream.Close();
+                await stream.DisposeAsync();
+                await conn.CloseAsync(0x0c);
+                await conn.DisposeAsync();
+            });
+
+            return buffer;
         }
     }
 }

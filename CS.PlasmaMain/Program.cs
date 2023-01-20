@@ -89,6 +89,7 @@ namespace CS.PlasmaMain
             {
                 Console.WriteLine($"Starting server with configuration file: {args[0]}");
 
+                // IPC to the client
                 var message = new byte[20];
                 var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
                 var messageHandled = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_handled");
@@ -96,6 +97,7 @@ namespace CS.PlasmaMain
                 var viewStream = mmf.CreateViewStream();
 
 
+                // start first server
                 Server server = new Server();
                 server.Start(0, args[0]);
 
@@ -105,6 +107,8 @@ namespace CS.PlasmaMain
 
                 Server[] servers = new Server[server.Definition!.ServerCount];
                 servers[0] = server;
+
+                // start the rest of the servers
                 for (int index = 1; index < server.Definition!.ServerCount; index++)
                 {
                     DatabaseDefinition definition = new DatabaseDefinition();
@@ -115,6 +119,7 @@ namespace CS.PlasmaMain
                     servers[index].State = state;
                 }
 
+                // set up IPC for server port information outbound communication
                 for (int index = 0; index < server.Definition!.ServerCount; index++)
                 {
                     Server serverLocal = servers[index];
@@ -133,7 +138,15 @@ namespace CS.PlasmaMain
                 }
 
                 CancellationTokenSource source = new();
-                while (server.IsRunning is not null && (bool)server.IsRunning)
+
+                // wait for at least one server to start
+                while (servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))
+                {
+                    source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+                }
+
+                // wait for all the servers to end
+                while (servers.Where(o => o.IsRunning is not null).All(o => (bool)!o.IsRunning!))
                 {
                     source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                 }

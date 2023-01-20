@@ -25,7 +25,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CS.UnitTest.PlasmaServer", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CS.PlasmaClient", "CS.PlasmaClient\CS.PlasmaClient.csproj", "{27294BE3-4D60-435B-8874-E27085C1C881}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CS.PlasmaCommandLineClient", "CS.PlasmaCommandLineClient\CS.PlasmaCommandLineClient.csproj", "{75143158-FE1E-48C1-97AC-720A561C6884}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CS.PlasmaCommandLineClient", "CS.PlasmaCommandLineClient\CS.PlasmaCommandLineClient.csproj", "{75143158-FE1E-48C1-97AC-720A561C6884}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{4F8C6A1C-513D-48ED-9562-BDB5A6AC2681}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
