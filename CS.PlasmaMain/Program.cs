@@ -113,7 +113,6 @@ namespace CS.PlasmaMain
                 {
                     DatabaseDefinition definition = new DatabaseDefinition();
                     definition.LoadConfiguration(args[0]);
-                    definition.UdpPort += index;
                     servers[index] = new Server { Definition = definition };
                     servers[index].Start(index);
                     servers[index].State = state;
@@ -140,13 +139,13 @@ namespace CS.PlasmaMain
                 CancellationTokenSource source = new();
 
                 // wait for at least one server to start
-                while (servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))
+                while (!servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))
                 {
                     source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                 }
 
                 // wait for all the servers to end
-                while (servers.Where(o => o.IsRunning is not null).All(o => (bool)!o.IsRunning!))
+                while (!servers.Where(o => o.IsRunning is not null).All(o => (bool)!o.IsRunning!))
                 {
                     source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                 }

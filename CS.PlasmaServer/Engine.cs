@@ -2,10 +2,8 @@
 using System.Net;
 using System.Net.Quic;
 using System.Net.Security;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
-using System;
 
 namespace CS.PlasmaServer
 {
@@ -17,7 +15,6 @@ namespace CS.PlasmaServer
         private DatabaseState? state_ = null;
         private Task? task_ = null;
         private bool isRunning_ = false;
-        private UdpClient? server_ = null;
         private CancellationTokenSource? source_ = null;
         private Dictionary<byte[], byte[]>? dictionary_ = null;
         private int? portNumber_ = null;
@@ -52,13 +49,7 @@ namespace CS.PlasmaServer
 
             isRunning_ = true;
             source_ = new CancellationTokenSource();
-            //server_ = new UdpClient(definition_!.UdpPort);
             dictionary_ = new Dictionary<byte[], byte[]>(StructuralEqualityComparer<byte[]>.Default);
-
-            //task_ = Task.Run(() =>
-            //{
-            //    _ = Run();
-            //});
 
             Task.Run(() =>
             {
@@ -79,9 +70,6 @@ namespace CS.PlasmaServer
                 task_ = null;
             }
 
-            server_?.Dispose();
-            server_ = null;
-
             source_?.Dispose();
             source_ = null;
         }
@@ -94,8 +82,8 @@ namespace CS.PlasmaServer
             {
                 DefaultCloseErrorCode = 0x0a,
                 DefaultStreamErrorCode = 0x0b,
-                ServerAuthenticationOptions = new SslServerAuthenticationOptions 
-                { 
+                ServerAuthenticationOptions = new SslServerAuthenticationOptions
+                {
                     ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 },
                     ServerCertificate = serverCertificate
                 }
@@ -155,7 +143,7 @@ namespace CS.PlasmaServer
                             {
                                 received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
                             }
-                            Console.WriteLine($"Quic received {length} bytes from {conn.RemoteEndPoint}");
+                            Console.WriteLine($"Quic port {listener.LocalEndPoint.Port} received {length} bytes from {conn.RemoteEndPoint}");
 
                             byte[]? bytesReturned;
                             if (bytesReceived.Length > 0)
@@ -178,7 +166,7 @@ namespace CS.PlasmaServer
                             bytesReturned.CopyTo(buffer, 4);
                             stream.Write(buffer, 0, buffer.Length);
                             stream.CompleteWrites();
-                            Console.WriteLine($"Quic sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}");
+                            Console.WriteLine($"Quic port {listener.LocalEndPoint.Port} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}");
 
                             stream.Close();
                             await stream.DisposeAsync();
@@ -193,42 +181,6 @@ namespace CS.PlasmaServer
                 {
                     Console.WriteLine($"Error: {e}");
                 }
-            }
-
-            _ = Task.Run(Stop);
-        }
-
-        public async Task Run()
-        {
-            CancellationToken token = source_!.Token;
-
-            while (isRunning_
-                && !token.IsCancellationRequested)
-            {
-                var result = await server_!.ReceiveAsync(token);
-                token.ThrowIfCancellationRequested();
-
-                byte[] bytesReceived = result.Buffer;
-                Console.WriteLine($"Received {bytesReceived.Length} bytes from {result.RemoteEndPoint}");
-
-                byte[]? bytesReturned;
-                if (bytesReceived.Length > 0)
-                {
-                    bytesReturned = Process(bytesReceived!);
-                    if (bytesReturned is null)
-                    {
-                        DatabaseResponse response = new DatabaseResponse { MessageType = DatabaseResponseType.CouldNotProcessCommand };
-                        bytesReturned = response.Bytes;
-                    }
-                }
-                else
-                {
-                    DatabaseResponse response = new DatabaseResponse { MessageType = DatabaseResponseType.NoBytesReceived };
-                    bytesReturned = response.Bytes;
-                }
-
-                _ = server_!.SendAsync(bytesReturned!, bytesReturned!.Length, result.RemoteEndPoint);
-                Console.WriteLine($"Sent {bytesReturned.Length} bytes to {result.RemoteEndPoint}");
             }
 
             _ = Task.Run(Stop);

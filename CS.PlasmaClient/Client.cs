@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Quic;
 using System.Net.Security;
-using System.Net.Sockets;
 using System.Reflection;
 
 namespace CS.PlasmaClient
@@ -14,10 +13,6 @@ namespace CS.PlasmaClient
         private static List<IDatabaseClientProcess?>? processors_ = null;
         private DatabaseState? state_ = null;
         private Dictionary<int, int> serverPortDictionary_ = new Dictionary<int, int>();
-
-        public Client()
-        {
-        }
 
         public void Dispose()
         {
@@ -65,7 +60,6 @@ namespace CS.PlasmaClient
 
         private async Task<DatabaseResponse?> ProcessRequest(DatabaseRequest request)
         {
-
             foreach (IDatabaseClientProcess? processor in processors_!)
             {
                 if (processor?.DatabaseRequestType == request.MessageType)
@@ -84,7 +78,7 @@ namespace CS.PlasmaClient
             return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
 
-        internal byte[]? Request(byte[]? data)
+        internal byte[]? Request(byte[]? data, int? overrideClientQueryCommitCount = null)
         {
             if (data is null
                 || definition_ is null
@@ -94,44 +88,56 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            Barrier? barrier = new Barrier(definition_.ClientCommitCount + 1);
+            int clientCommitCount = overrideClientQueryCommitCount ?? definition_.ClientCommitCount;
+            int clientQueryCount = overrideClientQueryCommitCount ?? definition_.ClientQueryCount;
+
+            Barrier? barrier = new Barrier(clientCommitCount + 1);
             ManualResetEvent startAllRequestsEvent = new ManualResetEvent(false);
-            Task[] tasks = new Task[definition_.ClientQueryCount];
+            Task[] tasks = new Task[clientQueryCount];
             ConcurrentBag<byte[]?> responses = new ConcurrentBag<byte[]?>();
             DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
             currentSlotInfo.SlotNumber = data.GetHashCode() % Constant.SlotCount;
 
-            for (byte index = 0; index < definition_.ClientQueryCount; index++)
+            for (byte index = 0; index < clientQueryCount; index++)
             {
-                byte serverNumber = index;// state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
+                byte serverNumber = state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
                         responses.Add(await RequestWithServerQuic(data, serverNumber));
-
-                        lock (this)
+                        try
                         {
-                            if (barrier is not null)
-                            {
-                                barrier.SignalAndWait();
-                            }
+                            // since we are waiting for ClientCommitCount responses, this could cause an exception
+                            // here because more than the required number of responses was received, or the barrier
+                            // instance may have been disposed of already
+                            barrier.SignalAndWait();
                         }
+                        catch { }
                     });
 
-                currentSlotInfo.CopyNumber = (byte)(index + 1);
-                //state_.FindNextCopySlot(currentSlotInfo, ref currentSlotInfo);
+                if (index < clientQueryCount - 1)
+                {
+                    if (ErrorNumber.Success != state_.FindNextCopySlot(currentSlotInfo, ref currentSlotInfo))
+                    {
+                        return null;
+                    }
+                }
             }
 
             // the number of tasks may exceed the barrier participant count
             // so after all the Tasks are created, then signal the event to cause them to start
             // as well, put any Barrier changes here or in the Tasks into a lock to prevent exceptions
             startAllRequestsEvent.Set();
-            barrier.SignalAndWait();
-            lock (this)
+            try
             {
-                barrier.Dispose();
-                barrier = null;
+                // since we are waiting for ClientCommitCount responses, this could cause an exception
+                // here because more than the required number of responses was received
+                barrier.SignalAndWait();
             }
+            catch { }
+
+            barrier.Dispose();
+            barrier = null;
 
             int tally = 0;
             byte[]? value = null;
@@ -159,7 +165,7 @@ namespace CS.PlasmaClient
                 }
             }
 
-            if (tally >= definition_.ClientCommitCount)
+            if (tally >= clientCommitCount)
             {
                 return value;
             }
@@ -167,23 +173,6 @@ namespace CS.PlasmaClient
             {
                 return new DatabaseResponse { MessageType = DatabaseResponseType.QuorumFailed }.Bytes;
             }
-        }
-
-        private byte[]? RequestWithServer(byte[]? data, byte serverNumber)
-        {
-            if (data is null)
-            {
-                return null;
-            }
-
-            int port = serverPortDictionary_[serverNumber];
-
-            IPEndPoint endPoint = new IPEndPoint(definition_!.IpAddress!, port);
-            UdpClient client = new UdpClient();
-            client.Connect(endPoint);
-            client.Send(data, data.Length);
-
-            return client.Receive(ref endPoint);
         }
 
         private async Task<byte[]?> RequestWithServerQuic(byte[]? data, byte serverNumber)
