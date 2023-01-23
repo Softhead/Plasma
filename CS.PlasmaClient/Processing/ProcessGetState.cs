@@ -21,7 +21,7 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            byte[]? buffer = client.Request(request.Bytes, 1);
+            byte[]? buffer = client.SendRequest(request, 1);
             if (buffer is not null)
             {
                 if (buffer.Length == 1 + Constant.SlotCount * 2)

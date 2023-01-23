@@ -96,7 +96,6 @@ namespace CS.PlasmaMain
                 var mmf = MemoryMappedFile.CreateOrOpen("Plasma_mmf", message.Length);
                 var viewStream = mmf.CreateViewStream();
 
-
                 // start first server
                 Server server = new Server();
                 server.Start(0, args[0]);

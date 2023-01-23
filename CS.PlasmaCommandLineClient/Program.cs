@@ -96,13 +96,7 @@ namespace CS.PlasmaCommandLineClient
             {
                 Console.Write("    Enter key: ");
                 string? key = Console.ReadLine()?.Trim();
-
-                byte[] data = new byte[1 + Encoding.UTF8.GetByteCount(key!)];
-                data[0] = (byte)DatabaseRequestType.Read;
-                Span<byte> dataSpan = data.AsSpan();
-                Span<byte> keySpan = Encoding.UTF8.GetBytes(key!).AsSpan();
-                keySpan.CopyTo(dataSpan.Slice(1));
-                return new DatabaseRequest { Bytes = dataSpan.ToArray() };
+                return DatabaseRequestHelper.ReadRequest(key);
             }
             else if (string.Compare("write", command, StringComparison.OrdinalIgnoreCase) == 0)
             {
@@ -110,17 +104,7 @@ namespace CS.PlasmaCommandLineClient
                 string? key = Console.ReadLine()?.Trim();
                 Console.Write("    Enter value: ");
                 string? value = Console.ReadLine()?.Trim();
-
-                int keyLength = Encoding.UTF8.GetByteCount(key!);
-                byte[] data = new byte[1 + keyLength + 1 + Encoding.UTF8.GetByteCount(value!)];
-                data[0] = (byte)DatabaseRequestType.Write;
-                Span<byte> dataSpan = data.AsSpan();
-                Span<byte> keySpan = Encoding.UTF8.GetBytes(key!).AsSpan();
-                keySpan.CopyTo(dataSpan.Slice(1));
-                Span<byte> valueSpan = Encoding.UTF8.GetBytes(value!).AsSpan();
-                dataSpan[keyLength + 1] = Constant.Delimiter;
-                valueSpan.CopyTo(dataSpan.Slice(keyLength + 2));
-                return new DatabaseRequest { Bytes = dataSpan.ToArray() };
+                return DatabaseRequestHelper.WriteRequest(key, value);
             }
             else if (string.Compare("getstate", command, StringComparison.OrdinalIgnoreCase) == 0)
             {
