@@ -19,6 +19,8 @@ namespace CS.PlasmaCommandLineClient
             }
             Console.WriteLine("For help, use command 'help'.\n");
 
+            CancellationTokenSource source = new CancellationTokenSource();
+
             Client? client = null;
             var message = new byte[20];
             var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
@@ -49,7 +51,7 @@ namespace CS.PlasmaCommandLineClient
                     }
                     messageHandled.Set();
                 }
-            });
+            }, source.Token);
 
             using (client = new Client())
             {

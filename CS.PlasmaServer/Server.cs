@@ -6,6 +6,7 @@ namespace CS.PlasmaServer
     {
         public ManualResetEvent PortNumberEvent = new ManualResetEvent(false);
 
+        private CancellationTokenSource source_ = new CancellationTokenSource();
         private DatabaseDefinition? definition_ = null;
         private Engine? engine_ = null;
         private DatabaseState? state_ = null;
@@ -92,7 +93,7 @@ namespace CS.PlasmaServer
             {
                 engine_.PortNumberEvent.WaitOne();
                 PortNumberEvent.Set();
-            });
+            }, source_.Token);
 
             return ErrorNumber.Success;
         }

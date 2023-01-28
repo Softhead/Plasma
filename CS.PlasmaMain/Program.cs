@@ -8,8 +8,9 @@ namespace CS.PlasmaMain
 {
     internal class Program
     {
-        static int Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
+            CancellationTokenSource source = new CancellationTokenSource();
             Console.WriteLine("Plasma Server");
 
             if (args.Length < 1)
@@ -121,7 +122,7 @@ namespace CS.PlasmaMain
                 for (int index = 0; index < server.Definition!.ServerCount; index++)
                 {
                     Server serverLocal = servers[index];
-                    Task.Run(() =>
+                    _ = Task.Run(() =>
                     {
                         serverLocal.PortNumberEvent.WaitOne();
                         Console.WriteLine($"Server: {serverLocal.ServerNumber} Port: {serverLocal.PortNumber}");
@@ -132,21 +133,19 @@ namespace CS.PlasmaMain
                         viewStream.Position = 0;
                         viewStream.Write(message, 0, message.Length);
                         messageWait.Set();
-                    });
+                    }, source.Token);
                 }
-
-                CancellationTokenSource source = new();
 
                 // wait for at least one server to start
                 while (!servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))
                 {
-                    source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
                 }
 
                 // wait for all the servers to end
                 while (!servers.Where(o => o.IsRunning is not null).All(o => (bool)!o.IsRunning!))
                 {
-                    source.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
                 }
 
                 return 0;

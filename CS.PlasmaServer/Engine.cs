@@ -51,10 +51,10 @@ namespace CS.PlasmaServer
             source_ = new CancellationTokenSource();
             dictionary_ = new Dictionary<byte[], byte[]>(StructuralEqualityComparer<byte[]>.Default);
 
-            Task.Run(() =>
+            task_ = Task.Run(() =>
             {
                 _ = RunQuic();
-            });
+            }, source_.Token);
 
             return ErrorNumber.Success;
         }
@@ -179,7 +179,7 @@ namespace CS.PlasmaServer
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"Error: {e}");
+                    Console.WriteLine($"Error in Engine.RunQuic: {e}");
                 }
             }
 

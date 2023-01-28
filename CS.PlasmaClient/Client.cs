@@ -9,10 +9,16 @@ namespace CS.PlasmaClient
 {
     public class Client : IDisposable
     {
+        private const int WORKER_MAX_RETRY_COUNT = 5;  // number of retries for worker records
+
         private DatabaseDefinition? definition_ = null;
         private static List<IDatabaseClientProcess?>? processors_ = null;
         private DatabaseState? state_ = null;
         private Dictionary<int, int> serverPortDictionary_ = new Dictionary<int, int>();
+        private Task? task_ = null;
+        private bool isRunning_ = false;
+        private CancellationTokenSource? source_ = null;
+        private Queue<WorkRecord> workQueue_ = new Queue<WorkRecord>();
 
         public void Dispose()
         {
@@ -32,7 +38,35 @@ namespace CS.PlasmaClient
             }
 
             definition_ = new DatabaseDefinition();
-            return definition_.LoadConfiguration(definitionFileName);
+            ErrorNumber result = definition_.LoadConfiguration(definitionFileName);
+
+            if (result == ErrorNumber.Success)
+            {
+                isRunning_ = true;
+                source_ = new CancellationTokenSource();
+
+                task_ = Task.Run(() =>
+                {
+                    _ = RunWorker();
+                }, source_.Token);
+            }
+
+            return result;
+        }
+
+        public void Stop()
+        {
+            isRunning_ = false;
+            source_?.Cancel();
+
+            if (task_ != null)
+            {
+                task_.Wait(TimeSpan.FromSeconds(2));
+                task_ = null;
+            }
+
+            source_?.Dispose();
+            source_ = null;
         }
 
         public async Task<DatabaseResponse?> Request(DatabaseRequest request)
@@ -77,13 +111,14 @@ namespace CS.PlasmaClient
             return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
 
-        internal byte[]? SendRequest(DatabaseRequest? request, int? overrideClientQueryCommitCount = null)
+        internal byte[]? SendRequest(DatabaseRequest? request, int? overrideClientQueryCommitCount = null, int? overrideServerNumber = null)
         {
             if (request is null
                 || request.Bytes is null
                 || definition_ is null
                 || definition_.IpAddress is null
-                || state_ is null)
+                || state_ is null
+                || source_ is null)
             {
                 return null;
             }
@@ -100,7 +135,7 @@ namespace CS.PlasmaClient
 
             for (byte index = 0; index < clientQueryCount; index++)
             {
-                byte serverNumber = state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
+                int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 Console.WriteLine($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.");
                 tasks[index] = Task.Run(async () =>
                     {
@@ -116,7 +151,7 @@ namespace CS.PlasmaClient
                         }
                         catch { }
                         Console.WriteLine($"Client received {receivedData?.Length} bytes from server {serverNumber}.");
-                    });
+                    }, source_.Token);
 
                 if (index < clientQueryCount - 1)
                 {
@@ -209,13 +244,15 @@ namespace CS.PlasmaClient
                     {
                         string? readKey = request.GetReadKey();
 
-                        foreach (var unmatchedRecord in unmatched)
+                        foreach (ResponseRecord unmatchedRecord in unmatched)
                         {
                             Console.WriteLine($"Unmatched response for reading key {readKey} from server {unmatchedRecord.ServerNumber}; updating server.");
-                            DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, value);
-                            _ = Task.Run(() =>
-                            {
-                                SendRequest(updateRequest);
+                            workQueue_.Enqueue(new WorkRecord 
+                            { 
+                                Request = request, 
+                                Response = unmatchedRecord, 
+                                Value = value, 
+                                State = WorkItemState.UpdateServer 
                             });
                         }
                     }
@@ -231,7 +268,7 @@ namespace CS.PlasmaClient
             }
         }
 
-        private async Task<byte[]?> RequestWithServerQuic(byte[]? data, byte serverNumber)
+        private async Task<byte[]?> RequestWithServerQuic(byte[]? data, int serverNumber)
         {
             if (Definition is null
                 || Definition.IpAddress is null
@@ -290,6 +327,85 @@ namespace CS.PlasmaClient
             });
 
             return buffer;
+        }
+
+        public async Task RunWorker()
+        {
+            if (source_ is null)
+            {
+                throw new Exception("Client.RunWorker aborting because source_ is null.");
+            }
+
+            CancellationToken token = source_.Token;
+
+            while (isRunning_
+                && !token.IsCancellationRequested)
+            {
+                try
+                {
+                    if (workQueue_.TryDequeue(out WorkRecord? workRecord))
+                    {
+                        if (workRecord.RetryCount > WORKER_MAX_RETRY_COUNT)
+                        {
+                            throw new Exception($"WorkRecord id '{workRecord.Id}' retry count exceeded.");
+                        }
+
+                        switch (workRecord.State)
+                        {
+                            case WorkItemState.UpdateServer:
+                                UpdateServerBegin(token, workRecord);
+                                break;
+                        }
+                    }
+
+                    // exponential decay in wait time;  shorter wait with more items in queue
+                    int depth = workQueue_.Count();
+                    depth--;
+                    double delay = 1000 * Math.Exp(-depth);
+                    await Task.Delay(TimeSpan.FromMilliseconds(delay), token);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Error in Client.RunWorker: {e}");
+                }
+            }
+
+            _ = Task.Run(Stop);
+        }
+
+        private void UpdateServerBegin(CancellationToken token, WorkRecord workRecord)
+        {
+            if (workRecord.Response is null)
+            {
+                Console.WriteLine($"Error in Client.UpdateServerBegin: Response is null.");
+                return;
+            }
+
+            string? readKey = workRecord.Request?.GetReadKey();
+
+            if (readKey is null)
+            {
+                Console.WriteLine($"Error in Client.UpdateServerBegin: readKey is null.");
+                return;
+            }
+
+            DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
+            _ = Task.Run(async () =>
+            {
+                byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);
+                if (updateResult is not null)
+                {
+                    // update was handled properly
+                    return;
+                }
+
+                // retry this state after a random delay
+                double delay = 1000 * Random.Shared.NextDouble();
+                await Task.Delay(TimeSpan.FromMilliseconds(delay), token);
+
+                workRecord.RetryCount++;
+                workQueue_.Enqueue(workRecord);
+            }, token);
         }
     }
 }
