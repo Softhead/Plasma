@@ -4,15 +4,28 @@
     <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
+	<EnablePreviewFeatures>true</EnablePreviewFeatures>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="local.cfg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="local.cfg" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="2.2.8" />
     <PackageReference Include="MSTest.TestFramework" Version="2.2.8" />
     <PackageReference Include="coverlet.collector" Version="3.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CS.PlasmaClient\CS.PlasmaClient.csproj" />
+    <ProjectReference Include="..\CS.PlasmaServer\CS.PlasmaServer.csproj" />
   </ItemGroup>
 
 </Project>

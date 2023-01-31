@@ -2,7 +2,7 @@
 
 namespace CS.PlasmaServer
 {
-    public class Server
+    public class Server : IServer
     {
         public ManualResetEvent PortNumberEvent = new ManualResetEvent(false);
 
@@ -43,6 +43,11 @@ namespace CS.PlasmaServer
             }
         }
 
+        public Engine? Engine
+        {
+            get => engine_;
+        }
+
         public ErrorNumber CreateNew(DatabaseDefinition definition, string definitionFileName)
         {
             StreamWriter s = File.CreateText(definitionFileName);
@@ -55,7 +60,6 @@ namespace CS.PlasmaServer
             s.WriteLine($"{DatabaseDefinitionKey.ClientCommitCount}={definition.ClientCommitCount}");
             s.WriteLine($"{DatabaseDefinitionKey.ServerCommitPeriod}={definition.ServerCommitPeriod}");
             s.WriteLine($"{DatabaseDefinitionKey.ServerCommitTriggerCount}={definition.ServerCommitTriggerCount}");
-            s.WriteLine($"{DatabaseDefinitionKey.UdpPort}={definition.UdpPort}");
 
             s.Close();
             return ErrorNumber.Success;
@@ -66,7 +70,7 @@ namespace CS.PlasmaServer
             get => engine_?.IsRunning;
         }
 
-        public ErrorNumber Start(int serverNumber, string? definitionFileName = null)
+        public ErrorNumber Start(int serverNumber, StreamReader? definitionStream = null)
         {
             if (definition_ is not null
                 && engine_ is not null)
@@ -78,8 +82,13 @@ namespace CS.PlasmaServer
 
             if (definition_ is null)
             {
+                if (definitionStream is null)
+                {
+                    throw new ArgumentNullException(nameof(definitionStream));
+                }
+
                 definition_ = new DatabaseDefinition();
-                ErrorNumber loadResult = definition_.LoadConfiguration(definitionFileName);
+                ErrorNumber loadResult = definition_.LoadConfiguration(definitionStream);
                 if (loadResult != ErrorNumber.Success)
                 {
                     return loadResult;

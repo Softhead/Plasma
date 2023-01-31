@@ -7,7 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace CS.PlasmaServer
 {
-    internal class Engine
+    public class Engine
     {
         public ManualResetEvent PortNumberEvent = new ManualResetEvent(false);
 
@@ -76,9 +76,9 @@ namespace CS.PlasmaServer
 
         private static X509Certificate2 serverCertificate = new X509Certificate2("c:\\tmp\\iis.pfx", "sofuto");
 
-        public static async Task<QuicServerConnectionOptions> QuicCallback(QuicConnection conn, SslClientHelloInfo info, CancellationToken token)
+        public static Task<QuicServerConnectionOptions> QuicCallback(QuicConnection conn, SslClientHelloInfo info, CancellationToken token)
         {
-            return new QuicServerConnectionOptions
+            return Task.FromResult(new QuicServerConnectionOptions
             {
                 DefaultCloseErrorCode = 0x0a,
                 DefaultStreamErrorCode = 0x0b,
@@ -87,7 +87,7 @@ namespace CS.PlasmaServer
                     ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 },
                     ServerCertificate = serverCertificate
                 }
-            };
+            });
         }
 
         public async Task RunQuic()

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Reflection;
+using System.Text;
 
 namespace CS.PlasmaClient
 {
@@ -14,7 +15,7 @@ namespace CS.PlasmaClient
         private DatabaseDefinition? definition_ = null;
         private static List<IDatabaseClientProcess?>? processors_ = null;
         private DatabaseState? state_ = null;
-        private Dictionary<int, int> serverPortDictionary_ = new Dictionary<int, int>();
+        private ConcurrentDictionary<int, int> serverPortDictionary_ = new ConcurrentDictionary<int, int>();
         private Task? task_ = null;
         private bool isRunning_ = false;
         private CancellationTokenSource? source_ = null;
@@ -28,9 +29,22 @@ namespace CS.PlasmaClient
 
         public DatabaseDefinition? Definition { get => definition_; }
 
-        public Dictionary<int, int> ServerPortDictionary { get => serverPortDictionary_; }
+        public ConcurrentDictionary<int, int> ServerPortDictionary { get => serverPortDictionary_; }
 
-        public ErrorNumber Start(string definitionFileName)
+        public bool IsReady
+        {
+            get
+            {
+                if (definition_ is null)
+                {
+                    return false;
+                }
+
+                return serverPortDictionary_.Count() == definition_.ServerCount;
+            }
+        }
+
+        public ErrorNumber Start(StreamReader definitionStream)
         {
             if (definition_ is not null)
             {
@@ -38,7 +52,7 @@ namespace CS.PlasmaClient
             }
 
             definition_ = new DatabaseDefinition();
-            ErrorNumber result = definition_.LoadConfiguration(definitionFileName);
+            ErrorNumber result = definition_.LoadConfiguration(definitionStream);
 
             if (result == ErrorNumber.Success)
             {
@@ -111,7 +125,7 @@ namespace CS.PlasmaClient
             return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
 
-        internal byte[]? SendRequest(DatabaseRequest? request, int? overrideClientQueryCommitCount = null, int? overrideServerNumber = null)
+        internal byte[]? SendRequest(DatabaseRequest? request, int? overrideClientCommitCount = null, int? overrideServerNumber = null)
         {
             if (request is null
                 || request.Bytes is null
@@ -123,8 +137,8 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            int clientCommitCount = overrideClientQueryCommitCount ?? definition_.ClientCommitCount;
-            int clientQueryCount = overrideClientQueryCommitCount ?? definition_.ClientQueryCount;
+            int clientCommitCount = overrideClientCommitCount ?? definition_.ClientCommitCount;
+            int clientQueryCount = overrideClientCommitCount ?? definition_.ClientQueryCount;
 
             Barrier? barrier = new Barrier(clientCommitCount + 1);
             ManualResetEvent startAllRequestsEvent = new ManualResetEvent(false);
@@ -133,7 +147,7 @@ namespace CS.PlasmaClient
             DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
             currentSlotInfo.SlotNumber = request.Bytes.GetHashCode() % Constant.SlotCount;
 
-            for (byte index = 0; index < clientQueryCount; index++)
+            for (int index = 0; index < clientQueryCount; index++)
             {
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 Console.WriteLine($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.");
@@ -150,7 +164,12 @@ namespace CS.PlasmaClient
                             barrier.SignalAndWait();
                         }
                         catch { }
-                        Console.WriteLine($"Client received {receivedData?.Length} bytes from server {serverNumber}.");
+                        string r = "";
+                        if (receivedData.Length > 1)
+                        {
+                            r = Encoding.UTF8.GetString(receivedData.AsSpan().Slice(1));
+                        }
+                        Console.WriteLine($"Client received {receivedData?.Length} bytes from server {serverNumber}.  '{r}'");
                     }, source_.Token);
 
                 if (index < clientQueryCount - 1)
@@ -177,57 +196,38 @@ namespace CS.PlasmaClient
             barrier.Dispose();
             barrier = null;
 
-            int tally = 0;
+            List<ResponseTally> tallies = new List<ResponseTally>();
             int count = 0;
-            byte[]? value = null;
-            List<ResponseRecord> unmatched = new List<ResponseRecord>();
 
             while (!responses.IsEmpty)
             {
                 if (responses.TryTake(out ResponseRecord? responseRecord))
                 {
                     count++;
-                    bool isUnmatched = true;
 
                     if (responseRecord is not null)
                     {
-                        if (count == 1)
+                        byte[]? value = responseRecord.Data;
+
+                        ResponseTally? foundTally = null;
+                        if (value is not null)
                         {
-                            isUnmatched = false;
-                            tally = 1;
-                            value = responseRecord.Data;
+                            foundTally = tallies.SingleOrDefault(o => o.Value is not null && o.Value.SequenceEqual(value));
+                        }
+
+                        if (foundTally is not null)
+                        {
+                            foundTally.Tally++;
                         }
                         else
                         {
-                            if (responseRecord.Data is null)
+                            tallies.Add(new ResponseTally
                             {
-                                if (value is null)
-                                {
-                                    isUnmatched = false;
-                                    tally++;
-                                }
-                            }
-                            else
-                            {
-                                if (value is not null)
-                                {
-                                    if (responseRecord.Data.SequenceEqual(value))
-                                    {
-                                        isUnmatched = false;
-                                        tally++;
-                                    }
-                                }
-                            }
+                                Tally = 1,
+                                Value = value,
+                                Response = responseRecord
+                            });
                         }
-                    }
-
-                    if (isUnmatched)
-                    {
-                        if (responseRecord is not null)
-                        {
-                            unmatched.Add(responseRecord);
-                        }
-                        Console.WriteLine($"Client received 1 unmatched response for a total of {count - tally} unmatched responses.");
                     }
                 }
                 else
@@ -236,34 +236,57 @@ namespace CS.PlasmaClient
                 }
             }
 
-            if (tally >= clientCommitCount)
-            {
-                if (unmatched.Count > 0)
-                {
-                    if (request.MessageType == DatabaseRequestType.Read)
-                    {
-                        string? readKey = request.GetReadKey();
+            int maxCount = tallies.Max(o => o.Tally);
+            ResponseTally maxTally = tallies.Where(o => o.Tally == maxCount).Single();
 
-                        foreach (ResponseRecord unmatchedRecord in unmatched)
+            bool passedQuorum = false;
+
+            if (maxCount >= clientCommitCount)
+            {
+                passedQuorum = true;
+            }
+            else if (maxCount > tallies.Count / 2)
+            {
+                passedQuorum = true;
+            }
+
+            // check for unmatched responses
+            if (tallies.Count > 1)
+            {
+                if (request.MessageType == DatabaseRequestType.Read)
+                {
+                    string? readKey = request.GetReadKey();
+
+                    foreach (ResponseTally tally in tallies)
+                    {
+                        if (tally.Tally == maxCount)
                         {
-                            Console.WriteLine($"Unmatched response for reading key {readKey} from server {unmatchedRecord.ServerNumber}; updating server.");
-                            workQueue_.Enqueue(new WorkRecord 
-                            { 
-                                Request = request, 
-                                Response = unmatchedRecord, 
-                                Value = value, 
-                                State = WorkItemState.UpdateServer 
+                            continue;
+                        }
+
+                        if (tally.Response is not null)
+                        {
+                            Console.WriteLine($"Unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
+                            workQueue_.Enqueue(new WorkRecord
+                            {
+                                Request = request,
+                                Response = tally.Response,
+                                Value = maxTally.Value.AsSpan().Slice(1).ToArray(),
+                                State = WorkItemState.UpdateServer
                             });
                         }
                     }
                 }
+            }
 
-                Console.WriteLine($"Client passed quorum with {tally} matching responses out of {count}.");
-                return value;
+            if (passedQuorum)
+            {
+                Console.WriteLine($"Client passed quorum with {maxCount} matching responses out of {count}.");
+                return maxTally.Value;
             }
             else
             {
-                Console.WriteLine($"Client failed quorum with {tally} matching responses out of {count}.");
+                Console.WriteLine($"Client failed quorum with {maxCount} matching responses out of {count}.");
                 return new DatabaseResponse { MessageType = DatabaseResponseType.QuorumFailed }.Bytes;
             }
         }
@@ -345,6 +368,8 @@ namespace CS.PlasmaClient
                 {
                     if (workQueue_.TryDequeue(out WorkRecord? workRecord))
                     {
+                        Console.WriteLine($"Client worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
+
                         if (workRecord.RetryCount > WORKER_MAX_RETRY_COUNT)
                         {
                             throw new Exception($"WorkRecord id '{workRecord.Id}' retry count exceeded.");
@@ -392,10 +417,12 @@ namespace CS.PlasmaClient
             DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
             _ = Task.Run(async () =>
             {
+                Console.WriteLine($"Client.UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
                 byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);
                 if (updateResult is not null)
                 {
                     // update was handled properly
+                    Console.WriteLine($"Client.UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
                     return;
                 }
 

@@ -11,7 +11,6 @@
         ClientCommitCount,
         ServerCommitPeriod,
         ServerCommitTriggerCount,
-        UdpPort,
         IpAddress
     };
 }

@@ -1,7 +1,5 @@
 ﻿using CS.PlasmaClient;
 using CS.PlasmaLibrary;
-using System.IO.MemoryMappedFiles;
-using System.Text;
 
 namespace CS.PlasmaCommandLineClient
 {
@@ -9,7 +7,7 @@ namespace CS.PlasmaCommandLineClient
     {
         private static bool stillGoing_ = true;
 
-        // usage: PlasmaCommandLineClient -server <server IP address> -port <server UDP port>
+        // usage: PlasmaCommandLineClient <config file>
         static async Task Main(string[] args)
         {
             if (args.Length != 1)
@@ -20,42 +18,15 @@ namespace CS.PlasmaCommandLineClient
             Console.WriteLine("For help, use command 'help'.\n");
 
             CancellationTokenSource source = new CancellationTokenSource();
+            StreamReader definitionStream = File.OpenText(args[0]);
 
-            Client? client = null;
-            var message = new byte[20];
-            var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
-            var messageHandled = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_handled");
-            var mmf = MemoryMappedFile.CreateOrOpen("Plasma_mmf", message.Length);
-            var viewStream = mmf.CreateViewStream();
-            messageHandled.Set();
-
-            _ = Task.Run(() =>
+            using (Client client = await ClientHelper.StartClient(source.Token, definitionStream))
             {
-                while (true)
+                // wait until client is ready
+                while (!client.IsReady)
                 {
-                    messageWait.WaitOne();
-                    viewStream.Position = 0;
-                    viewStream.Read(message, 0, message.Length);
-
-                    // handle the message
-                    string messageString = Encoding.UTF8.GetString(message);
-                    string[] parts = messageString.Split(' ');
-                    if (int.TryParse(parts[0], out int server)
-                        && int.TryParse(parts[1], out int port))
-                    {
-                        while (client is null)
-                        {
-                            Thread.Sleep(TimeSpan.FromSeconds(1));
-                        }
-                        client.ServerPortDictionary.Add(server, port);
-                    }
-                    messageHandled.Set();
+                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
                 }
-            }, source.Token);
-
-            using (client = new Client())
-            {
-                client.Start(args[0]);
 
                 while (stillGoing_)
                 {
@@ -160,8 +131,7 @@ namespace CS.PlasmaCommandLineClient
                 return "successful";
             }
 
-            ReadOnlySpan<byte> value = response.Bytes.AsSpan().Slice(1);
-            return Encoding.UTF8.GetString(value);
+            return response.ReadValue();
         }
 
         private static void PrintHelp()

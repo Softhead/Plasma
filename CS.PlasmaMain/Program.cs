@@ -1,8 +1,6 @@
 ﻿using CS.PlasmaLibrary;
 using CS.PlasmaServer;
-using System.IO.MemoryMappedFiles;
 using System.Net;
-using System.Text;
 
 namespace CS.PlasmaMain
 {
@@ -61,9 +59,6 @@ namespace CS.PlasmaMain
                 Console.WriteLine("# of commits that trigger a commit reconciliation: ");
                 definition.ServerCommitTriggerCount = ReadInt();
 
-                Console.WriteLine("UDP port to bind to: ");
-                definition.UdpPort = ReadInt();
-
                 Console.WriteLine("IP address to bind to: ");
                 definition.IpAddress = ReadIpAddress();
 
@@ -90,51 +85,8 @@ namespace CS.PlasmaMain
             {
                 Console.WriteLine($"Starting server with configuration file: {args[0]}");
 
-                // IPC to the client
-                var message = new byte[20];
-                var messageWait = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_wait");
-                var messageHandled = new EventWaitHandle(false, EventResetMode.AutoReset, "Plasma_handled");
-                var mmf = MemoryMappedFile.CreateOrOpen("Plasma_mmf", message.Length);
-                var viewStream = mmf.CreateViewStream();
-
-                // start first server
-                Server server = new Server();
-                server.Start(0, args[0]);
-
-                DatabaseState state = new DatabaseState(server.Definition);
-                state.SetupInitialSlots();
-                server.State = state;
-
-                Server[] servers = new Server[server.Definition!.ServerCount];
-                servers[0] = server;
-
-                // start the rest of the servers
-                for (int index = 1; index < server.Definition!.ServerCount; index++)
-                {
-                    DatabaseDefinition definition = new DatabaseDefinition();
-                    definition.LoadConfiguration(args[0]);
-                    servers[index] = new Server { Definition = definition };
-                    servers[index].Start(index);
-                    servers[index].State = state;
-                }
-
-                // set up IPC for server port information outbound communication
-                for (int index = 0; index < server.Definition!.ServerCount; index++)
-                {
-                    Server serverLocal = servers[index];
-                    _ = Task.Run(() =>
-                    {
-                        serverLocal.PortNumberEvent.WaitOne();
-                        Console.WriteLine($"Server: {serverLocal.ServerNumber} Port: {serverLocal.PortNumber}");
-
-                        messageHandled.WaitOne();
-                        string messageString = $"{serverLocal.ServerNumber} {serverLocal.PortNumber}";
-                        Encoding.UTF8.GetBytes(messageString).CopyTo(message.AsSpan());
-                        viewStream.Position = 0;
-                        viewStream.Write(message, 0, message.Length);
-                        messageWait.Set();
-                    }, source.Token);
-                }
+                StreamReader definitionStream = File.OpenText(args[0]);
+                Server[] servers = ServerHelper.StartServers(source.Token, definitionStream);
 
                 // wait for at least one server to start
                 while (!servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))

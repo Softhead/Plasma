@@ -11,6 +11,12 @@ namespace CS.PlasmaLibrary
 
         public static DatabaseRequest WriteRequest(string? key, byte[]? value)
         {
+            // message bytes are:
+            // 0: request type
+            // 1..delimiter index: key as UTF8 bytes
+            // delimiter index: the delimiter character
+            // delimiter index + 1..end: value as UTF8 bytes
+
             int keyLength = Encoding.UTF8.GetByteCount(key!);
             byte[] data = new byte[1 + keyLength + 1 + value?.Length ?? 0];
             data[0] = (byte)DatabaseRequestType.Write;
@@ -27,6 +33,10 @@ namespace CS.PlasmaLibrary
 
         public static DatabaseRequest ReadRequest(string? key)
         {
+            // message bytes are:
+            // 0: request type
+            // 1..end: key as UTF8 bytes
+
             byte[] data = new byte[1 + Encoding.UTF8.GetByteCount(key!)];
             data[0] = (byte)DatabaseRequestType.Read;
             Span<byte> dataSpan = data.AsSpan();

@@ -15,5 +15,31 @@ namespace CS.PlasmaLibrary
 
             return Encoding.UTF8.GetString(request.Bytes.AsSpan().Slice(1));
         }
+
+        public static string? GetWriteKey(this DatabaseRequest request)
+        {
+            if (request is null
+                || request.Bytes is null
+                || request.Bytes.Length == 1)
+            {
+                return null;
+            }
+
+            byte[]? bytes = request.GetWriteKeyBytes();
+            return bytes is null ? null : Encoding.UTF8.GetString(bytes);
+        }
+
+        public static byte[]? GetWriteKeyBytes(this DatabaseRequest request)
+        {
+            if (request is null
+                || request.Bytes is null
+                || request.Bytes.Length == 1)
+            {
+                return null;
+            }
+
+            int index = request.Bytes.AsSpan().IndexOf(Constant.Delimiter);
+            return request.Bytes.AsSpan().Slice(1, index - 1).ToArray();
+        }
     }
 }

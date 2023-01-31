@@ -13,19 +13,11 @@ namespace CS.PlasmaLibrary
         public int ClientCommitCount { get; set; }  // number of commits, 1 to ClientQueryCount;  defines the quorum count for the client to assume a commit
         public int ServerCommitPeriod { get; set; }  // milliseconds before scheduling a commit reconciliation
         public int ServerCommitTriggerCount { get; set; }  // number of commits that trigger a commit reconciliation
-        public int UdpPort { get; set; }  // UDP port number to bind to
         public IPAddress? IpAddress { get; set; }  // IP address to bind to
 
-        public ErrorNumber LoadConfiguration(string? definitionFileName)
+        public ErrorNumber LoadConfiguration(StreamReader definitionStream)
         {
-            if (definitionFileName is null)
-            {
-                return ErrorNumber.ConfigFileMissing;
-            }
-
-            StreamReader s = File.OpenText(definitionFileName);
-
-            string? line = s.ReadLine();
+            string? line = definitionStream.ReadLine();
 
             while (line is not null)
             {
@@ -35,7 +27,7 @@ namespace CS.PlasmaLibrary
                     return result;
                 }
 
-                line = s.ReadLine();
+                line = definitionStream.ReadLine();
             }
 
             return ErrorNumber.Success;
@@ -102,10 +94,6 @@ namespace CS.PlasmaLibrary
 
                 case DatabaseDefinitionKey.ServerCommitTriggerCount:
                     ServerCommitTriggerCount = int.Parse(value);
-                    break;
-
-                case DatabaseDefinitionKey.UdpPort:
-                    UdpPort = int.Parse(value);
                     break;
 
                 case DatabaseDefinitionKey.IpAddress:
