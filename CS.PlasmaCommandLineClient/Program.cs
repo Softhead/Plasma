@@ -10,12 +10,14 @@ namespace CS.PlasmaCommandLineClient
         // usage: PlasmaCommandLineClient <config file>
         static async Task Main(string[] args)
         {
+            Logger.Sinks.Add(new LoggerSinkFile(@"c:\tmp\PlasmaClient.log"));
+
             if (args.Length != 1)
             {
-                Console.WriteLine("usage: PlasmaCommandLineClient <config file>");
+                Logger.Log("usage: PlasmaCommandLineClient <config file>");
                 return;
             }
-            Console.WriteLine("For help, use command 'help'.\n");
+            Logger.Log("For help, use command 'help'.\n");
 
             CancellationTokenSource source = new CancellationTokenSource();
             StreamReader definitionStream = File.OpenText(args[0]);
@@ -39,11 +41,11 @@ namespace CS.PlasmaCommandLineClient
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
                             DatabaseResponse? response = await client.Request(request);
-                            Console.WriteLine($"Response: {DecodeResponse(response)}");
+                            Logger.Log($"Response: {DecodeResponse(response)}");
                         }
                         else
                         {
-                            Console.WriteLine($"The command '{command}' is not a valid command.");
+                            Logger.Log($"The command '{command}' is not a valid command.");
                         }
                     }
                 }
@@ -136,14 +138,14 @@ namespace CS.PlasmaCommandLineClient
 
         private static void PrintHelp()
         {
-            Console.WriteLine("Commands:");
-            Console.WriteLine("ping");
-            Console.WriteLine("stop");
-            Console.WriteLine("start");
-            Console.WriteLine("read");
-            Console.WriteLine("write");
-            Console.WriteLine("getstate");
-            Console.WriteLine("exit");
+            Logger.Log("Commands:");
+            Logger.Log("ping");
+            Logger.Log("stop");
+            Logger.Log("start");
+            Logger.Log("read");
+            Logger.Log("write");
+            Logger.Log("getstate");
+            Logger.Log("exit");
         }
     }
 }

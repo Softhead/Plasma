@@ -18,16 +18,18 @@ namespace CS.PlasmaServer
         private CancellationTokenSource? source_ = null;
         private Dictionary<byte[], byte[]>? dictionary_ = null;
         private int? portNumber_ = null;
+        private int? serverNumber_ = null;
 
         private static List<IDatabaseServerProcess?>? processors_ = null;
 
-        public Engine(DatabaseDefinition definition)
+        public Engine(DatabaseDefinition definition, int serverNumber)
         {
             if (definition is null)
             {
                 throw new ArgumentNullException(nameof(definition));
             }
 
+            serverNumber_ = serverNumber;
             definition_ = definition;
         }
 
@@ -143,21 +145,27 @@ namespace CS.PlasmaServer
                             {
                                 received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
                             }
-                            Console.WriteLine($"Quic port {listener.LocalEndPoint.Port} received {length} bytes from {conn.RemoteEndPoint}");
+                            DatabaseRequest request = new DatabaseRequest{ Bytes = bytesReceived };
+                            Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}");
 
+                            DatabaseResponse response = new DatabaseResponse();
                             byte[]? bytesReturned;
                             if (bytesReceived.Length > 0)
                             {
                                 bytesReturned = Process(bytesReceived!);
-                                if (bytesReturned is null)
+                                if (bytesReturned is not null)
                                 {
-                                    DatabaseResponse response = new DatabaseResponse { MessageType = DatabaseResponseType.CouldNotProcessCommand };
+                                    response.Bytes = bytesReturned;
+                                }
+                                else
+                                {
+                                    response.MessageType = DatabaseResponseType.CouldNotProcessCommand;
                                     bytesReturned = response.Bytes;
                                 }
                             }
                             else
                             {
-                                DatabaseResponse response = new DatabaseResponse { MessageType = DatabaseResponseType.NoBytesReceived };
+                                response.MessageType = DatabaseResponseType.NoBytesReceived;
                                 bytesReturned = response.Bytes;
                             }
 
@@ -166,7 +174,7 @@ namespace CS.PlasmaServer
                             bytesReturned.CopyTo(buffer, 4);
                             stream.Write(buffer, 0, buffer.Length);
                             stream.CompleteWrites();
-                            Console.WriteLine($"Quic port {listener.LocalEndPoint.Port} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}");
+                            Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}");
 
                             stream.Close();
                             await stream.DisposeAsync();
@@ -179,7 +187,7 @@ namespace CS.PlasmaServer
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"Error in Engine.RunQuic: {e}");
+                    Logger.Log($"Error in Engine.RunQuic: {e}");
                 }
             }
 

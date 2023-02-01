@@ -44,6 +44,14 @@ namespace CS.PlasmaClient
             }
         }
 
+        public int WorkerQueueCount
+        {
+            get
+            {
+                return workQueue_.Count;
+            }
+        }
+
         public ErrorNumber Start(StreamReader definitionStream)
         {
             if (definition_ is not null)
@@ -150,7 +158,7 @@ namespace CS.PlasmaClient
             for (int index = 0; index < clientQueryCount; index++)
             {
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
-                Console.WriteLine($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.");
+                Logger.Log($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
@@ -164,17 +172,14 @@ namespace CS.PlasmaClient
                             barrier.SignalAndWait();
                         }
                         catch { }
-                        string r = "";
-                        if (receivedData.Length > 1)
-                        {
-                            r = Encoding.UTF8.GetString(receivedData.AsSpan().Slice(1));
-                        }
-                        Console.WriteLine($"Client received {receivedData?.Length} bytes from server {serverNumber}.  '{r}'");
+
+                        DatabaseResponse response = new DatabaseResponse { Bytes = receivedData };
+                        Logger.Log($"Client received {receivedData?.Length} bytes from server {serverNumber}.  {response}");
                     }, source_.Token);
 
                 if (index < clientQueryCount - 1)
                 {
-                    if (ErrorNumber.Success != state_.FindNextCopySlot(currentSlotInfo, ref currentSlotInfo))
+                    if (ErrorNumber.Success != state_.FindNextCopySlot(currentSlotInfo, ref currentSlotInfo, definition_.ServerCount))
                     {
                         return null;
                     }
@@ -237,8 +242,24 @@ namespace CS.PlasmaClient
             }
 
             int maxCount = tallies.Max(o => o.Tally);
-            ResponseTally maxTally = tallies.Where(o => o.Tally == maxCount).Single();
 
+            ResponseTally maxTally = null;
+            try
+            {
+                maxTally = tallies.Where(o => o.Tally == maxCount).Single();
+            }
+            catch
+            {
+                foreach (var tally in tallies)
+                {
+                    string rr = "";
+                    if (tally.Value.Length > 1)
+                    {
+                        rr = Encoding.UTF8.GetString(tally.Value.AsSpan().Slice(1));
+                    }
+                    Logger.Log($"error tally state: '{tally.Value[0]}' value: '{rr}'");
+                }
+            }
             bool passedQuorum = false;
 
             if (maxCount >= clientCommitCount)
@@ -266,7 +287,7 @@ namespace CS.PlasmaClient
 
                         if (tally.Response is not null)
                         {
-                            Console.WriteLine($"Unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
+                            Logger.Log($"Unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
                             workQueue_.Enqueue(new WorkRecord
                             {
                                 Request = request,
@@ -281,12 +302,12 @@ namespace CS.PlasmaClient
 
             if (passedQuorum)
             {
-                Console.WriteLine($"Client passed quorum with {maxCount} matching responses out of {count}.");
+                Logger.Log($"Client passed quorum with {maxCount} matching responses out of {count}.");
                 return maxTally.Value;
             }
             else
             {
-                Console.WriteLine($"Client failed quorum with {maxCount} matching responses out of {count}.");
+                Logger.Log($"Client failed quorum with {maxCount} matching responses out of {count}.");
                 return new DatabaseResponse { MessageType = DatabaseResponseType.QuorumFailed }.Bytes;
             }
         }
@@ -368,7 +389,7 @@ namespace CS.PlasmaClient
                 {
                     if (workQueue_.TryDequeue(out WorkRecord? workRecord))
                     {
-                        Console.WriteLine($"Client worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
+                        Logger.Log($"Client worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
 
                         if (workRecord.RetryCount > WORKER_MAX_RETRY_COUNT)
                         {
@@ -391,7 +412,7 @@ namespace CS.PlasmaClient
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"Error in Client.RunWorker: {e}");
+                    Logger.Log($"Error in Client.RunWorker: {e}");
                 }
             }
 
@@ -402,7 +423,7 @@ namespace CS.PlasmaClient
         {
             if (workRecord.Response is null)
             {
-                Console.WriteLine($"Error in Client.UpdateServerBegin: Response is null.");
+                Logger.Log($"Error in Client.UpdateServerBegin: Response is null.");
                 return;
             }
 
@@ -410,19 +431,19 @@ namespace CS.PlasmaClient
 
             if (readKey is null)
             {
-                Console.WriteLine($"Error in Client.UpdateServerBegin: readKey is null.");
+                Logger.Log($"Error in Client.UpdateServerBegin: readKey is null.");
                 return;
             }
 
             DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
             _ = Task.Run(async () =>
             {
-                Console.WriteLine($"Client.UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
+                Logger.Log($"Client.UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
                 byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);
                 if (updateResult is not null)
                 {
                     // update was handled properly
-                    Console.WriteLine($"Client.UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
+                    Logger.Log($"Client.UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
                     return;
                 }
 

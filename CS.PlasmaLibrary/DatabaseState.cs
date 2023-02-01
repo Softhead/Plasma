@@ -24,6 +24,7 @@
         // FindNextCopySlot
         // 
         // In a ring of slots, jump around the ring as follows to select the slot where the next copy will reside.
+        // Even case:
         //
         //         0
         //     5       6
@@ -33,7 +34,17 @@
         //     7       4
         //         1
         //
-        public ErrorNumber FindNextCopySlot(DatabaseSlotInfo currentSlotInfo, ref DatabaseSlotInfo nextSlotInfo)
+        // Odd case:
+        //
+        //         0
+        //     3       4
+        //
+        //   7           8
+        //
+        //    6         1
+        //       2   5
+        //
+        public ErrorNumber FindNextCopySlot(DatabaseSlotInfo currentSlotInfo, ref DatabaseSlotInfo nextSlotInfo, int serverCount)
         {
             if (definition_ is null)
             {
@@ -47,23 +58,53 @@
 
             nextSlotInfo.CopyNumber = (byte)(currentSlotInfo.CopyNumber + 1);
 
-            switch (currentSlotInfo.CopyNumber)
+            if (serverCount % 2 == 0)
             {
-                case 0:  // next at 180 degrees
-                case 2:
-                case 4:
-                case 6:
-                    nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 2)) % Constant.SlotCount;
-                    break;
+                // even case
+                switch (currentSlotInfo.CopyNumber)
+                {
+                    case 0:  // next at 180 degrees
+                    case 2:
+                    case 4:
+                    case 6:
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 2)) % Constant.SlotCount;
+                        break;
 
-                case 1:  // next at 90 degrees
-                case 5:
-                    nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 4)) % Constant.SlotCount;
-                    break;
+                    case 1:  // next at 90 degrees
+                    case 5:
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 4)) % Constant.SlotCount;
+                        break;
 
-                case 3:  // next at 45 degrees
-                    nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 8)) % Constant.SlotCount;
-                    break;
+                    case 3:  // next at 45 degrees
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 8)) % Constant.SlotCount;
+                        break;
+                }
+            }
+            else
+            {
+                // odd case
+                switch (currentSlotInfo.CopyNumber)
+                {
+                    case 0:  // next at 120 degrees
+                    case 2:
+                    case 4:
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 3)) % Constant.SlotCount;
+                        break;
+
+                    case 1:  // next at 80 degrees
+                    case 3:
+                    case 5:
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (2 * Constant.SlotCount / 9)) % Constant.SlotCount;
+                        break;
+
+                    case 6:  // next at 40 degrees
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (Constant.SlotCount / 9)) % Constant.SlotCount;
+                        break;
+
+                    case 7:  // next at 200 degrees
+                        nextSlotInfo.SlotNumber = (currentSlotInfo.SlotNumber + (5 * Constant.SlotCount / 9)) % Constant.SlotCount;
+                        break;
+                }
             }
 
             return ErrorNumber.Success;
@@ -91,7 +132,7 @@
                     slots_[currentIndex].ServerNumber = replica;
                     currentSlotInfo.SlotNumber = currentIndex;
                     currentSlotInfo.CopyNumber = replica;
-                    FindNextCopySlot(currentSlotInfo, ref nextSlotInfo);
+                    FindNextCopySlot(currentSlotInfo, ref nextSlotInfo, definition_.ServerCount);
                     currentIndex = nextSlotInfo.SlotNumber;
                 }
             }

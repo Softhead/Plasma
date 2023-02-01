@@ -95,7 +95,7 @@ namespace CS.PlasmaServer
                 }
             }
 
-            engine_ = new Engine(definition_);
+            engine_ = new Engine(definition_, serverNumber_);
             engine_.Start();
 
             Task.Run(() =>

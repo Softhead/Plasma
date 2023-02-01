@@ -9,6 +9,13 @@ namespace CS.UnitTest.PlasmaServer
     [TestClass]
     public class ClientWorker
     {
+        [TestInitialize]
+        public void Init()
+        {
+            Logger.Sinks.Add(new LoggerSinkFile());
+            Logger.Log("Start test init");
+        }
+
         [TestMethod]
         public async Task OneServerHasBadResult()
         {
@@ -16,9 +23,11 @@ namespace CS.UnitTest.PlasmaServer
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");
             StreamReader configStreamReader = new StreamReader(configStream!);
             CancellationTokenSource source = new CancellationTokenSource();
+            Logger.Log("Start servers");
             Server[] servers = ServerHelper.StartServers(source.Token, configStreamReader);
 
             configStream!.Position = 0;
+            Logger.Log("Start client");
             Client client = await ClientHelper.StartClient(source.Token, configStreamReader);
 
             // wait for all servers to start
@@ -27,6 +36,7 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
             }
 
+            Logger.Log("Start write data");
             DatabaseRequest write = DatabaseRequestHelper.WriteRequest("key", "value");
             DatabaseResponse? writeResult = await client.Request(write);
 
@@ -35,15 +45,23 @@ namespace CS.UnitTest.PlasmaServer
 
             // act
             // corrupt the value in one server
+            Logger.Log("Start corrupting data");
             byte[]? keyBytes = write.GetWriteKeyBytes();
             servers[0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
 
             // read the value
+            Logger.Log("Start read data");
             DatabaseRequest read = DatabaseRequestHelper.ReadRequest("key");
             DatabaseResponse? response = await client.Request(read);
-            await Task.Delay(TimeSpan.FromSeconds(10));
+
+            // wait for all workers to complete
+            while (client.WorkerQueueCount > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
+            }
 
             // assert
+            Logger.Log("Start assert");
             Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
             Assert.AreEqual("value", response!.ReadValue());
             byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];

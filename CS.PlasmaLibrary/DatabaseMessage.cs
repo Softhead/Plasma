@@ -1,4 +1,6 @@
-﻿namespace CS.PlasmaLibrary
+﻿using System.Text;
+
+namespace CS.PlasmaLibrary
 {
     public class DatabaseMessage<T> where T : Enum
     {
@@ -44,6 +46,11 @@
             {
                 bytes_ = value;
             }
+        }
+
+        public override string ToString()
+        {
+            return DatabaseMessageHelper.BytesToString(MessageType?.ToString(), Bytes);
         }
     }
 }
