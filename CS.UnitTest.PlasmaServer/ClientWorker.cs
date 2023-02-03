@@ -7,15 +7,8 @@ using System.Text;
 namespace CS.UnitTest.PlasmaServer
 {
     [TestClass]
-    public class ClientWorker
+    public class ClientWorker : TestBase
     {
-        [TestInitialize]
-        public void Init()
-        {
-            Logger.Sinks.Add(new LoggerSinkFile());
-            Logger.Log("Start test init");
-        }
-
         [TestMethod]
         public async Task OneServerHasBadResult()
         {

@@ -7,5 +7,8 @@
         public const int VersionMax = 256;
 
         public const byte Delimiter = (byte)',';
+
+        public const int ServerNumberUnfilled = 255;
+        public const int ServerNumberShunt = 254;
     }
 }

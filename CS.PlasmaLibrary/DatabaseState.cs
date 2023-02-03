@@ -1,4 +1,6 @@
-﻿namespace CS.PlasmaLibrary
+﻿using System.Runtime.ExceptionServices;
+
+namespace CS.PlasmaLibrary
 {
     public class DatabaseState
     {
@@ -54,6 +56,12 @@
             if (currentSlotInfo.CopyNumber == definition_.ServerCopyCount - 1)
             {
                 return ErrorNumber.CopyNumberOutOfRange;
+            }
+
+            // indivisible number of slots, just use the first slot
+            if (slots_[currentSlotInfo.SlotNumber].ServerNumber == Constant.ServerNumberShunt)
+            {
+                currentSlotInfo.SlotNumber = 0;
             }
 
             nextSlotInfo.CopyNumber = (byte)(currentSlotInfo.CopyNumber + 1);
@@ -114,26 +122,52 @@
         {
             for (int index = 0; index < Constant.SlotCount; index++)
             {
-                slots_[index] = new DatabaseSlot { ServerNumber = 255, VersionNumber = 0 };
+                slots_[index] = new DatabaseSlot { ServerNumber = Constant.ServerNumberUnfilled, VersionNumber = 0 };
             }
 
             DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
             DatabaseSlotInfo nextSlotInfo = new DatabaseSlotInfo();
             for (int index = 0; index < Constant.SlotCount; index++)
             {
-                if (slots_[index].ServerNumber != 255)
+                if (slots_[index].ServerNumber != Constant.ServerNumberUnfilled)
                 {
-                    break;
+                    continue;
                 }
 
+                List<int> indices = new();
+                List<int> availableReplicas = Enumerable.Range(0, definition_!.ServerCount).ToList();
                 int currentIndex = index;
-                for (byte replica = 0; replica < definition_!.ServerCopyCount; replica++)
+                for (int replica = 0; replica < definition_!.ServerCopyCount; replica++)
                 {
-                    slots_[currentIndex].ServerNumber = replica;
+                    Console.WriteLine($"index: {currentIndex} replica: {replica}");
+                    if (slots_[currentIndex].ServerNumber == Constant.ServerNumberUnfilled)
+                    {
+                        indices.Add(currentIndex);
+                    }
+                    else
+                    {
+                        availableReplicas.Remove(slots_[currentIndex].ServerNumber);
+                    }
                     currentSlotInfo.SlotNumber = currentIndex;
-                    currentSlotInfo.CopyNumber = replica;
-                    FindNextCopySlot(currentSlotInfo, ref nextSlotInfo, definition_.ServerCount);
-                    currentIndex = nextSlotInfo.SlotNumber;
+                    currentSlotInfo.CopyNumber = (byte)replica;
+
+                    if (replica + 1 < definition_!.ServerCopyCount)
+                    {
+                        FindNextCopySlot(currentSlotInfo, ref nextSlotInfo, definition_.ServerCount);
+                        currentIndex = nextSlotInfo.SlotNumber;
+                    }
+                }
+
+                for (int index2 = 0; index2 < indices.Count; index2++)
+                {
+                    if (indices.Count == availableReplicas.Count)
+                    {
+                        slots_[indices[index2]].ServerNumber = (byte)availableReplicas[index2];
+                    }
+                    else
+                    {
+                        slots_[indices[index2]].ServerNumber = Constant.ServerNumberShunt;
+                    }
                 }
             }
         }
