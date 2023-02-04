@@ -128,58 +128,79 @@ namespace CS.PlasmaServer
                         while (isRunning_
                             && !token.IsCancellationRequested)
                         {
-                            QuicConnection conn = await listener.AcceptConnectionAsync(token);
-                            QuicStream stream = await conn.AcceptInboundStreamAsync(token);
+                            QuicConnection? conn = null;
+                            QuicStream? stream = null;
 
-                            byte[] buffer = new byte[4];
-                            int received = 0;
-                            while (received == 0 && !token.IsCancellationRequested)
+                            try
                             {
-                                received = await stream.ReadAsync(buffer.AsMemory(received, buffer.Length - received), token);
-                            }
+                                conn = await listener.AcceptConnectionAsync(token);
+                                stream = await conn.AcceptInboundStreamAsync(token);
 
-                            int length = BitConverter.ToInt32(buffer, 0);
-                            byte[] bytesReceived = new byte[length];
-                            received = 0;
-                            while (received == 0 && !token.IsCancellationRequested)
-                            {
-                                received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
-                            }
-                            DatabaseRequest request = new DatabaseRequest{ Bytes = bytesReceived };
-                            Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}");
-
-                            DatabaseResponse response = new DatabaseResponse();
-                            byte[]? bytesReturned;
-                            if (bytesReceived.Length > 0)
-                            {
-                                bytesReturned = Process(bytesReceived!);
-                                if (bytesReturned is not null)
+                                byte[] buffer = new byte[4];
+                                int received = 0;
+                                while (received == 0 && !token.IsCancellationRequested)
                                 {
-                                    response.Bytes = bytesReturned;
+                                    received = await stream.ReadAsync(buffer.AsMemory(received, buffer.Length - received), token);
+                                }
+
+                                int length = BitConverter.ToInt32(buffer, 0);
+                                byte[] bytesReceived = new byte[length];
+                                received = 0;
+                                while (received == 0 && !token.IsCancellationRequested)
+                                {
+                                    received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
+                                }
+                                DatabaseRequest request = new DatabaseRequest { Bytes = bytesReceived };
+                                Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}");
+
+                                DatabaseResponse response = new DatabaseResponse();
+                                byte[]? bytesReturned;
+                                if (bytesReceived.Length > 0)
+                                {
+                                    bytesReturned = Process(bytesReceived!);
+                                    if (bytesReturned is not null)
+                                    {
+                                        response.Bytes = bytesReturned;
+                                    }
+                                    else
+                                    {
+                                        response.MessageType = DatabaseResponseType.CouldNotProcessCommand;
+                                        bytesReturned = response.Bytes;
+                                    }
                                 }
                                 else
                                 {
-                                    response.MessageType = DatabaseResponseType.CouldNotProcessCommand;
+                                    response.MessageType = DatabaseResponseType.NoBytesReceived;
                                     bytesReturned = response.Bytes;
                                 }
+
+                                buffer = new byte[bytesReturned!.Length + 4];
+                                BitConverter.GetBytes(bytesReturned.Length).CopyTo(buffer, 0);
+                                bytesReturned.CopyTo(buffer, 4);
+                                stream.Write(buffer, 0, buffer.Length);
+                                stream.CompleteWrites();
+                                Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}");
+
+                                stream.Close();
                             }
-                            else
+                            catch (Exception e)
                             {
-                                response.MessageType = DatabaseResponseType.NoBytesReceived;
-                                bytesReturned = response.Bytes;
+                                Logger.Log($"Quic server {serverNumber_} exception on {conn?.RemoteEndPoint}: {e.Message}");
                             }
+                            finally
+                            {
+                                if (stream is not null)
+                                {
+                                    await stream.DisposeAsync();
+                                    stream = null;
+                                }
 
-                            buffer = new byte[bytesReturned!.Length + 4];
-                            BitConverter.GetBytes(bytesReturned.Length).CopyTo(buffer, 0);
-                            bytesReturned.CopyTo(buffer, 4);
-                            stream.Write(buffer, 0, buffer.Length);
-                            stream.CompleteWrites();
-                            Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}");
-
-                            stream.Close();
-                            await stream.DisposeAsync();
-                            await conn.CloseAsync(0x0c);
-                            await conn.DisposeAsync();
+                                if (conn is not null)
+                                {
+                                    await conn.CloseAsync(0x0c);
+                                    await conn.DisposeAsync();
+                                }
+                            }
                         }
 
                         await listener.DisposeAsync();

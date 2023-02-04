@@ -17,10 +17,6 @@ namespace CS.UnitTest.PlasmaServer
             // act
             state.SetupInitialSlots();
             int[] data = new int[Constant.SlotCount];
-            for (int index = 0; index < Constant.SlotCount; index++)
-            {
-                data[index] = state.Slots[index].ServerNumber;
-            }
 
             // assert
             Assert.IsFalse(state.Slots.Any(o => o.ServerNumber == Constant.ServerNumberUnfilled));
@@ -38,10 +34,6 @@ namespace CS.UnitTest.PlasmaServer
             // act
             state.SetupInitialSlots();
             int[] data = new int[Constant.SlotCount];
-            for (int index = 0; index < Constant.SlotCount; index++)
-            {
-                data[index] = state.Slots[index].ServerNumber;
-            }
 
             // assert
             Assert.IsFalse(state.Slots.Any(o => o.ServerNumber == Constant.ServerNumberUnfilled));

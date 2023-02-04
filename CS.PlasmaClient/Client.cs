@@ -20,6 +20,7 @@ namespace CS.PlasmaClient
         private bool isRunning_ = false;
         private CancellationTokenSource? source_ = null;
         private Queue<WorkRecord> workQueue_ = new Queue<WorkRecord>();
+        private ManualResetEvent workComplete_ = new ManualResetEvent(true);
 
         public void Dispose()
         {
@@ -44,11 +45,11 @@ namespace CS.PlasmaClient
             }
         }
 
-        public int WorkerQueueCount
+        public bool WorkerQueueEmpty
         {
             get
             {
-                return workQueue_.Count;
+                return workQueue_.Count == 0 && workComplete_.WaitOne();
             }
         }
 
@@ -147,16 +148,18 @@ namespace CS.PlasmaClient
 
             int clientCommitCount = overrideClientCommitCount ?? definition_.ClientCommitCount;
             int clientQueryCount = overrideClientCommitCount ?? definition_.ClientQueryCount;
+            int slotCount = 100;// Constant.SlotCount / definition_.ServerCopyCount;
 
             Barrier? barrier = new Barrier(clientCommitCount + 1);
             ManualResetEvent startAllRequestsEvent = new ManualResetEvent(false);
             Task[] tasks = new Task[clientQueryCount];
             ConcurrentBag<ResponseRecord> responses = new ConcurrentBag<ResponseRecord>();
             DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
-            currentSlotInfo.SlotNumber = request.Bytes.GetHashCode() % Constant.SlotCount;
+            currentSlotInfo.SlotNumber = request.GetHashCode() % slotCount;
 
             for (int index = 0; index < clientQueryCount; index++)
             {
+                Logger.Log($"Client slot number: {currentSlotInfo.SlotNumber}");
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 Logger.Log($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                 tasks[index] = Task.Run(async () =>
@@ -250,7 +253,7 @@ namespace CS.PlasmaClient
             }
             catch
             {
-                foreach (var tally in tallies)
+                foreach (ResponseTally tally in tallies)
                 {
                     string rr = "";
                     if (tally.Value.Length > 1)
@@ -387,6 +390,7 @@ namespace CS.PlasmaClient
             {
                 try
                 {
+                    workComplete_.Reset();
                     if (workQueue_.TryDequeue(out WorkRecord? workRecord))
                     {
                         Logger.Log($"Client worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
@@ -399,7 +403,7 @@ namespace CS.PlasmaClient
                         switch (workRecord.State)
                         {
                             case WorkItemState.UpdateServer:
-                                UpdateServerBegin(token, workRecord);
+                                await UpdateServerBegin(token, workRecord);
                                 break;
                         }
                     }
@@ -414,12 +418,16 @@ namespace CS.PlasmaClient
                 {
                     Logger.Log($"Error in Client.RunWorker: {e}");
                 }
+                finally
+                {
+                    workComplete_.Set();
+                }
             }
 
             _ = Task.Run(Stop);
         }
 
-        private void UpdateServerBegin(CancellationToken token, WorkRecord workRecord)
+        private async Task UpdateServerBegin(CancellationToken token, WorkRecord workRecord)
         {
             if (workRecord.Response is null)
             {
@@ -436,7 +444,7 @@ namespace CS.PlasmaClient
             }
 
             DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
-            _ = Task.Run(async () =>
+            await Task.Run(async () =>
             {
                 Logger.Log($"Client.UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
                 byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);

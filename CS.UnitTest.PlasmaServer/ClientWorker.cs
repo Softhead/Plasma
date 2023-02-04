@@ -29,36 +29,42 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
             }
 
-            Logger.Log("Start write data");
-            DatabaseRequest write = DatabaseRequestHelper.WriteRequest("key", "value");
-            DatabaseResponse? writeResult = await client.Request(write);
-
-            // attest
-            Assert.AreEqual(DatabaseResponseType.Success, writeResult!.MessageType);
-
-            // act
-            // corrupt the value in one server
-            Logger.Log("Start corrupting data");
-            byte[]? keyBytes = write.GetWriteKeyBytes();
-            servers[0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
-
-            // read the value
-            Logger.Log("Start read data");
-            DatabaseRequest read = DatabaseRequestHelper.ReadRequest("key");
-            DatabaseResponse? response = await client.Request(read);
-
-            // wait for all workers to complete
-            while (client.WorkerQueueCount > 0)
+            Parallel.For(0, 10, async (index) =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
-            }
+                Logger.Log("Start write data");
+                string key = $"key{index}";
+                string value = $"value{index}";
+                DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
+                DatabaseResponse? writeResult = await client.Request(write);
 
-            // assert
-            Logger.Log("Start assert");
-            Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
-            Assert.AreEqual("value", response!.ReadValue());
-            byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
-            Assert.AreEqual("value", Encoding.UTF8.GetString(bytes));
+                // attest
+                Assert.AreEqual(DatabaseResponseType.Success, writeResult!.MessageType);
+
+                // act
+                // corrupt the value in one server
+                Logger.Log("Start corrupting data");
+                byte[]? keyBytes = write.GetWriteKeyBytes();
+                servers[0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
+
+                // read the value
+                Logger.Log("Start read data");
+                DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
+                DatabaseResponse? response = await client.Request(read);
+
+                // wait for all workers to complete
+                while (!client.WorkerQueueEmpty)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
+                }
+
+                // assert
+                Logger.Log("Start assert");
+                Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
+                Assert.AreEqual(value, response!.ReadValue());
+                byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
+                Assert.AreEqual(value, Encoding.UTF8.GetString(bytes));
+            }
+            );
         }
     }
 }

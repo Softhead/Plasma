@@ -139,7 +139,6 @@ namespace CS.PlasmaLibrary
                 int currentIndex = index;
                 for (int replica = 0; replica < definition_!.ServerCopyCount; replica++)
                 {
-                    Console.WriteLine($"index: {currentIndex} replica: {replica}");
                     if (slots_[currentIndex].ServerNumber == Constant.ServerNumberUnfilled)
                     {
                         indices.Add(currentIndex);

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Xml.Linq;
 
 namespace CS.PlasmaLibrary
 {
@@ -51,6 +52,22 @@ namespace CS.PlasmaLibrary
         public override string ToString()
         {
             return DatabaseMessageHelper.BytesToString(MessageType?.ToString(), Bytes);
+        }
+
+        public override int GetHashCode()
+        {
+            if (bytes_ is null || bytes_.Length == 0)
+            {
+                return 0;
+            }
+
+            uint hash = 7;
+            for (int index = 0; index < bytes_.Length; index++)
+            {
+                hash = (hash << 5) - hash + bytes_[index];
+            }
+
+            return (int)(hash & 0xffff);
         }
     }
 }
