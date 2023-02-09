@@ -21,9 +21,21 @@ namespace CS.PlasmaClient
         private CancellationTokenSource? source_ = null;
         private Queue<WorkRecord> workQueue_ = new Queue<WorkRecord>();
         private ManualResetEvent workComplete_ = new ManualResetEvent(true);
+        private static ConcurrentDictionary<int, QuicConnection> serverConnections_ = new ConcurrentDictionary<int, QuicConnection>();
 
         public void Dispose()
         {
+            foreach (QuicConnection conn in serverConnections_.Values)
+            {
+                QuicConnection localConn = conn;
+                _ = Task.Run(async () =>
+                {
+                    await localConn.CloseAsync(0x0c);
+                    await localConn.DisposeAsync();
+                });
+            }
+
+            serverConnections_.Clear();
         }
 
         public DatabaseState? State { get => state_; set => state_ = value; }
@@ -172,7 +184,14 @@ namespace CS.PlasmaClient
                             // since we are waiting for ClientCommitCount responses, this could cause an exception
                             // here because more than the required number of responses was received, or the barrier
                             // instance may have been disposed of already
-                            barrier.SignalAndWait();
+                            if (barrier is not null)
+                            {
+                                barrier.SignalAndWait();
+                            }
+                            else
+                            {
+                                Logger.Log($"Client excess response from server {serverNumber}.");
+                            }
                         }
                         catch { }
 
@@ -326,18 +345,28 @@ namespace CS.PlasmaClient
 
             CancellationToken token = new CancellationToken();
             int port = ServerPortDictionary[serverNumber];
-            IPEndPoint endpoint = new IPEndPoint(Definition.IpAddress, port);
-            QuicConnection conn = await QuicConnection.ConnectAsync(
-                new QuicClientConnectionOptions
+            if (!serverConnections_.TryGetValue(port, out QuicConnection? conn))
+            {
+                IPEndPoint endpoint = new IPEndPoint(Definition.IpAddress, port);
+                conn = await QuicConnection.ConnectAsync(
+                    new QuicClientConnectionOptions
+                    {
+                        RemoteEndPoint = endpoint,
+                        DefaultCloseErrorCode = 0x0a,
+                        DefaultStreamErrorCode = 0x0b,
+                        ClientAuthenticationOptions = new SslClientAuthenticationOptions { ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 } },
+                        MaxInboundUnidirectionalStreams = 10,
+                        MaxInboundBidirectionalStreams = 100
+                    }, token);
+                if (!serverConnections_.TryAdd(port, conn))
                 {
-                    RemoteEndPoint = endpoint,
-                    DefaultCloseErrorCode = 0x0a,
-                    DefaultStreamErrorCode = 0x0b,
-                    ClientAuthenticationOptions = new SslClientAuthenticationOptions { ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 } },
-                    MaxInboundUnidirectionalStreams = 10,
-                    MaxInboundBidirectionalStreams = 100
-                }, token);
-            QuicStream stream = await conn.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                    await conn.CloseAsync(0x0c);
+                    await conn.DisposeAsync();
+                    serverConnections_.TryGetValue(port, out conn);
+                }
+            }
+
+            QuicStream stream = await conn!.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
 
             // message format is 4 bytes message length, followed by data
             byte[] buffer = new byte[data.Length + 4];
@@ -369,8 +398,6 @@ namespace CS.PlasmaClient
             {
                 stream.Close();
                 await stream.DisposeAsync();
-                await conn.CloseAsync(0x0c);
-                await conn.DisposeAsync();
             });
 
             return buffer;

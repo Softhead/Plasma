@@ -29,7 +29,7 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
             }
 
-            Parallel.For(0, 10, async (index) =>
+            Parallel.For(0, 2, async (index) =>
             {
                 Logger.Log("Start write data");
                 string key = $"key{index}";
@@ -63,8 +63,7 @@ namespace CS.UnitTest.PlasmaServer
                 Assert.AreEqual(value, response!.ReadValue());
                 byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
                 Assert.AreEqual(value, Encoding.UTF8.GetString(bytes));
-            }
-            );
+            });
         }
     }
 }

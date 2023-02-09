@@ -32,7 +32,8 @@ namespace CS.PlasmaCommandLineClient
 
                 while (stillGoing_)
                 {
-                    Console.Write("Enter command: ");
+                    await Logger.WaitForQueues();
+                    Logger.Log("Enter command: ");
                     string? command = Console.ReadLine()?.Trim();
 
                     DatabaseRequest? request = DecodeCommand(command);

@@ -13,5 +13,16 @@
                 sink.Write(message);
             }
         }
+
+        public static async Task WaitForQueues()
+        {
+            int count = sinks_.Count;
+            Task[] tasks = new Task[count];
+            for (int index = 0; index < count; index++)
+            {
+                tasks[index] = sinks_[index].WaitForQueue();
+            }
+            Task.WaitAll(tasks);
+        }
     }
 }

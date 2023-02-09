@@ -124,16 +124,16 @@ namespace CS.PlasmaServer
                         // communicate the port number out via IPC
                         portNumber_ = listener.LocalEndPoint.Port;
                         PortNumberEvent.Set();
+                        QuicConnection conn = await listener.AcceptConnectionAsync(token);
 
                         while (isRunning_
+                            && conn is not null
                             && !token.IsCancellationRequested)
                         {
-                            QuicConnection? conn = null;
                             QuicStream? stream = null;
 
                             try
                             {
-                                conn = await listener.AcceptConnectionAsync(token);
                                 stream = await conn.AcceptInboundStreamAsync(token);
 
                                 byte[] buffer = new byte[4];
@@ -194,13 +194,13 @@ namespace CS.PlasmaServer
                                     await stream.DisposeAsync();
                                     stream = null;
                                 }
-
-                                if (conn is not null)
-                                {
-                                    await conn.CloseAsync(0x0c);
-                                    await conn.DisposeAsync();
-                                }
                             }
+                        }
+
+                        if (conn is not null)
+                        {
+                            await conn.CloseAsync(0x0c);
+                            await conn.DisposeAsync();
                         }
 
                         await listener.DisposeAsync();
