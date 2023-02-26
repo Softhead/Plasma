@@ -8,10 +8,7 @@ namespace CS.PlasmaClient
 
         public async Task<DatabaseResponse?> ProcessAsync(Client client, DatabaseRequest request)
         {
-            if (client.State is null)
-            {
-                client.State = new DatabaseState(client.Definition);
-            }
+            client.State ??= new DatabaseState(client.Definition);
 
             if (client is null
                 || client.Definition is null

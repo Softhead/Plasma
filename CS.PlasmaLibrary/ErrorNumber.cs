@@ -11,5 +11,6 @@
         ConfigNoKey = 6,
         ConfigFileMissing = 7,
         DefinitionNotSet = 8,
+        CannotGetState = 9
     }
 }

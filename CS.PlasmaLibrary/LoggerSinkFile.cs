@@ -36,6 +36,7 @@ namespace CS.PlasmaLibrary
                 string? message = queue_?.Take(tokenSource_.Token);
                 if (message is not null)
                 {
+                    streamWriter_?.Write(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff "));
                     streamWriter_?.WriteLine(message);
                     streamWriter_?.Flush();
                 }

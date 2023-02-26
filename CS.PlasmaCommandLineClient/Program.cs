@@ -22,7 +22,7 @@ namespace CS.PlasmaCommandLineClient
             CancellationTokenSource source = new CancellationTokenSource();
             StreamReader definitionStream = File.OpenText(args[0]);
 
-            using (Client client = await ClientHelper.StartClient(source.Token, definitionStream))
+            using (Client client = await ClientHelper.StartClient(source.Token, definitionStream, true))
             {
                 // wait until client is ready
                 while (!client.IsReady)
@@ -41,7 +41,7 @@ namespace CS.PlasmaCommandLineClient
                     {
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
-                            DatabaseResponse? response = await client.Request(request);
+                            DatabaseResponse? response = await client.ProcessRequest(request);
                             Logger.Log($"Response: {DecodeResponse(response)}");
                         }
                         else

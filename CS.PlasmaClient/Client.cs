@@ -13,36 +13,27 @@ namespace CS.PlasmaClient
         private const int WORKER_MAX_RETRY_COUNT = 5;  // number of retries for worker records
 
         private DatabaseDefinition? definition_ = null;
-        private static List<IDatabaseClientProcess?>? processors_ = null;
         private DatabaseState? state_ = null;
-        private ConcurrentDictionary<int, int> serverPortDictionary_ = new ConcurrentDictionary<int, int>();
         private Task? task_ = null;
         private bool isRunning_ = false;
-        private CancellationTokenSource? source_ = null;
-        private Queue<WorkRecord> workQueue_ = new Queue<WorkRecord>();
-        private ManualResetEvent workComplete_ = new ManualResetEvent(true);
-        private static ConcurrentDictionary<int, QuicConnection> serverConnections_ = new ConcurrentDictionary<int, QuicConnection>();
+        private CancellationTokenSource source_ = new();
+        private readonly Queue<WorkRecord> workQueue_ = new();
+        private readonly ManualResetEvent workComplete_ = new(true);
+        private readonly int clientNumber_ = ++clientCount_;
+
+        private static int clientCount_ = 0;
+        private static List<IDatabaseClientProcess?>? processors_ = null;
+        private static readonly ConcurrentDictionary<int, int> serverPortDictionary_ = new();
 
         public void Dispose()
         {
-            foreach (QuicConnection conn in serverConnections_.Values)
-            {
-                QuicConnection localConn = conn;
-                _ = Task.Run(async () =>
-                {
-                    await localConn.CloseAsync(0x0c);
-                    await localConn.DisposeAsync();
-                });
-            }
-
-            serverConnections_.Clear();
         }
 
         public DatabaseState? State { get => state_; set => state_ = value; }
 
         public DatabaseDefinition? Definition { get => definition_; }
 
-        public ConcurrentDictionary<int, int> ServerPortDictionary { get => serverPortDictionary_; }
+        public static ConcurrentDictionary<int, int> ServerPortDictionary { get => serverPortDictionary_; }
 
         public bool IsReady
         {
@@ -53,7 +44,7 @@ namespace CS.PlasmaClient
                     return false;
                 }
 
-                return serverPortDictionary_.Count() == definition_.ServerCount;
+                return serverPortDictionary_.Count == definition_.ServerCount;
             }
         }
 
@@ -65,7 +56,7 @@ namespace CS.PlasmaClient
             }
         }
 
-        public ErrorNumber Start(StreamReader definitionStream)
+        public async Task<ErrorNumber> Start(StreamReader definitionStream)
         {
             if (definition_ is not null)
             {
@@ -77,8 +68,19 @@ namespace CS.PlasmaClient
 
             if (result == ErrorNumber.Success)
             {
+                processors_ = Assembly.GetExecutingAssembly()
+                    .GetTypes()
+                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseClientProcess)))
+                    .Select(o => (IDatabaseClientProcess?)Activator.CreateInstance(o))
+                    .ToList();
+
+                DatabaseResponse? responseGetState = await ProcessRequest(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
+                if (responseGetState?.MessageType != DatabaseResponseType.Success)
+                {
+                    return ErrorNumber.CannotGetState;
+                }
+
                 isRunning_ = true;
-                source_ = new CancellationTokenSource();
 
                 task_ = Task.Run(() =>
                 {
@@ -92,7 +94,7 @@ namespace CS.PlasmaClient
         public void Stop()
         {
             isRunning_ = false;
-            source_?.Cancel();
+            source_.Cancel();
 
             if (task_ != null)
             {
@@ -100,34 +102,10 @@ namespace CS.PlasmaClient
                 task_ = null;
             }
 
-            source_?.Dispose();
-            source_ = null;
+            source_.Dispose();
         }
 
-        public async Task<DatabaseResponse?> Request(DatabaseRequest request)
-        {
-            if (processors_ is null)
-            {
-                processors_ = Assembly.GetExecutingAssembly()
-                    .GetTypes()
-                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseClientProcess)))
-                    .Select(o => (IDatabaseClientProcess?)Activator.CreateInstance(o))
-                    .ToList();
-            }
-
-            if (state_ is null)
-            {
-                DatabaseResponse? responseGetState = await ProcessRequest(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
-                if (responseGetState?.MessageType != DatabaseResponseType.Success)
-                {
-                    return responseGetState;
-                }
-            }
-
-            return await ProcessRequest(request);
-        }
-
-        private async Task<DatabaseResponse?> ProcessRequest(DatabaseRequest request)
+        public async Task<DatabaseResponse?> ProcessRequest(DatabaseRequest request)
         {
             foreach (IDatabaseClientProcess? processor in processors_!)
             {
@@ -152,8 +130,7 @@ namespace CS.PlasmaClient
                 || request.Bytes is null
                 || definition_ is null
                 || definition_.IpAddress is null
-                || state_ is null
-                || source_ is null)
+                || state_ is null)
             {
                 return null;
             }
@@ -162,18 +139,20 @@ namespace CS.PlasmaClient
             int clientQueryCount = overrideClientCommitCount ?? definition_.ClientQueryCount;
             int slotCount = 100;// Constant.SlotCount / definition_.ServerCopyCount;
 
-            Barrier? barrier = new Barrier(clientCommitCount + 1);
-            ManualResetEvent startAllRequestsEvent = new ManualResetEvent(false);
+            Barrier? barrier = new(clientCommitCount + 1);
+            ManualResetEvent startAllRequestsEvent = new(false);
             Task[] tasks = new Task[clientQueryCount];
-            ConcurrentBag<ResponseRecord> responses = new ConcurrentBag<ResponseRecord>();
-            DatabaseSlotInfo currentSlotInfo = new DatabaseSlotInfo();
-            currentSlotInfo.SlotNumber = request.GetHashCode() % slotCount;
+            ConcurrentBag<ResponseRecord> responses = new();
+            DatabaseSlotInfo currentSlotInfo = new()
+            {
+                SlotNumber = request.GetHashCode() % slotCount
+            };
 
             for (int index = 0; index < clientQueryCount; index++)
             {
-                Logger.Log($"Client slot number: {currentSlotInfo.SlotNumber}");
+                Logger.Log($"Client {clientNumber_} slot number: {currentSlotInfo.SlotNumber}");
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
-                Logger.Log($"Client sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
+                Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
@@ -190,13 +169,13 @@ namespace CS.PlasmaClient
                             }
                             else
                             {
-                                Logger.Log($"Client excess response from server {serverNumber}.");
+                                Logger.Log($"Client {clientNumber_} excess response from server {serverNumber}.");
                             }
                         }
                         catch { }
 
-                        DatabaseResponse response = new DatabaseResponse { Bytes = receivedData };
-                        Logger.Log($"Client received {receivedData?.Length} bytes from server {serverNumber}.  {response}");
+                        DatabaseResponse response = new() { Bytes = receivedData };
+                        Logger.Log($"Client {clientNumber_} received {receivedData?.Length} bytes from server {serverNumber}.  {response}");
                     }, source_.Token);
 
                 if (index < clientQueryCount - 1)
@@ -223,7 +202,7 @@ namespace CS.PlasmaClient
             barrier.Dispose();
             barrier = null;
 
-            List<ResponseTally> tallies = new List<ResponseTally>();
+            List<ResponseTally> tallies = new();
             int count = 0;
 
             while (!responses.IsEmpty)
@@ -263,25 +242,31 @@ namespace CS.PlasmaClient
                 }
             }
 
-            int maxCount = tallies.Max(o => o.Tally);
+            int maxCount = 0;
+            ResponseTally? maxTally = null;
 
-            ResponseTally maxTally = null;
-            try
+            if (tallies.Count > 0)
             {
-                maxTally = tallies.Where(o => o.Tally == maxCount).Single();
-            }
-            catch
-            {
-                foreach (ResponseTally tally in tallies)
+                maxCount = tallies.Max(o => o.Tally);
+
+                try
                 {
-                    string rr = "";
-                    if (tally.Value.Length > 1)
+                    maxTally = tallies.Where(o => o.Tally == maxCount).Single();
+                }
+                catch
+                {
+                    foreach (ResponseTally tally in tallies)
                     {
-                        rr = Encoding.UTF8.GetString(tally.Value.AsSpan().Slice(1));
+                        string rr = string.Empty;
+                        if (tally.Value?.Length > 1)
+                        {
+                            rr = Encoding.UTF8.GetString(tally.Value.AsSpan().Slice(1));
+                        }
+                        Logger.Log($"Client {clientNumber_} error tally state: '{tally.Value?[0]}' value: '{rr}'");
                     }
-                    Logger.Log($"error tally state: '{tally.Value[0]}' value: '{rr}'");
                 }
             }
+
             bool passedQuorum = false;
 
             if (maxCount >= clientCommitCount)
@@ -309,12 +294,12 @@ namespace CS.PlasmaClient
 
                         if (tally.Response is not null)
                         {
-                            Logger.Log($"Unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
+                            Logger.Log($"Client {clientNumber_} unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
                             workQueue_.Enqueue(new WorkRecord
                             {
                                 Request = request,
                                 Response = tally.Response,
-                                Value = maxTally.Value.AsSpan().Slice(1).ToArray(),
+                                Value = maxTally?.Value.AsSpan().Slice(1).ToArray(),
                                 State = WorkItemState.UpdateServer
                             });
                         }
@@ -324,12 +309,12 @@ namespace CS.PlasmaClient
 
             if (passedQuorum)
             {
-                Logger.Log($"Client passed quorum with {maxCount} matching responses out of {count}.");
-                return maxTally.Value;
+                Logger.Log($"Client {clientNumber_} passed quorum with {maxCount} matching responses out of {count}.");
+                return maxTally?.Value;
             }
             else
             {
-                Logger.Log($"Client failed quorum with {maxCount} matching responses out of {count}.");
+                Logger.Log($"Client {clientNumber_} failed quorum with {maxCount} matching responses out of {count}.");
                 return new DatabaseResponse { MessageType = DatabaseResponseType.QuorumFailed }.Bytes;
             }
         }
@@ -343,28 +328,23 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            CancellationToken token = new CancellationToken();
+            CancellationToken token = new();
             int port = ServerPortDictionary[serverNumber];
-            if (!serverConnections_.TryGetValue(port, out QuicConnection? conn))
-            {
-                IPEndPoint endpoint = new IPEndPoint(Definition.IpAddress, port);
-                conn = await QuicConnection.ConnectAsync(
-                    new QuicClientConnectionOptions
-                    {
-                        RemoteEndPoint = endpoint,
-                        DefaultCloseErrorCode = 0x0a,
-                        DefaultStreamErrorCode = 0x0b,
-                        ClientAuthenticationOptions = new SslClientAuthenticationOptions { ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 } },
-                        MaxInboundUnidirectionalStreams = 10,
-                        MaxInboundBidirectionalStreams = 100
-                    }, token);
-                if (!serverConnections_.TryAdd(port, conn))
+            Logger.Log($"Client {clientNumber_} using port {port}.");
+            QuicConnection? conn = null;
+
+            IPEndPoint endpoint = new(Definition.IpAddress, port);
+            Logger.Log($"Client {clientNumber_} connection to server {serverNumber}, creating endpoint to port {endpoint.Port}.");
+            conn = await QuicConnection.ConnectAsync(
+                new QuicClientConnectionOptions
                 {
-                    await conn.CloseAsync(0x0c);
-                    await conn.DisposeAsync();
-                    serverConnections_.TryGetValue(port, out conn);
-                }
-            }
+                    RemoteEndPoint = endpoint,
+                    DefaultCloseErrorCode = 0x0a,
+                    DefaultStreamErrorCode = 0x0b,
+                    ClientAuthenticationOptions = new SslClientAuthenticationOptions { ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 } },
+                    MaxInboundUnidirectionalStreams = 10,
+                    MaxInboundBidirectionalStreams = 100
+                }, token);
 
             QuicStream stream = await conn!.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
 
@@ -407,7 +387,7 @@ namespace CS.PlasmaClient
         {
             if (source_ is null)
             {
-                throw new Exception("Client.RunWorker aborting because source_ is null.");
+                throw new Exception("Client {clientNumber_} RunWorker aborting because source_ is null.");
             }
 
             CancellationToken token = source_.Token;
@@ -420,30 +400,30 @@ namespace CS.PlasmaClient
                     workComplete_.Reset();
                     if (workQueue_.TryDequeue(out WorkRecord? workRecord))
                     {
-                        Logger.Log($"Client worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
+                        Logger.Log($"Client {clientNumber_} worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
 
                         if (workRecord.RetryCount > WORKER_MAX_RETRY_COUNT)
                         {
-                            throw new Exception($"WorkRecord id '{workRecord.Id}' retry count exceeded.");
+                            throw new Exception($"Client {clientNumber_} workRecord id '{workRecord.Id}' retry count exceeded.");
                         }
 
                         switch (workRecord.State)
                         {
                             case WorkItemState.UpdateServer:
-                                await UpdateServerBegin(token, workRecord);
+                                await UpdateServerBegin(workRecord, token);
                                 break;
                         }
                     }
 
                     // exponential decay in wait time;  shorter wait with more items in queue
-                    int depth = workQueue_.Count();
+                    int depth = workQueue_.Count;
                     depth--;
                     double delay = 1000 * Math.Exp(-depth);
                     await Task.Delay(TimeSpan.FromMilliseconds(delay), token);
                 }
                 catch (Exception e)
                 {
-                    Logger.Log($"Error in Client.RunWorker: {e}");
+                    Logger.Log($"Client {clientNumber_} exception in RunWorker: {e}");
                 }
                 finally
                 {
@@ -454,11 +434,11 @@ namespace CS.PlasmaClient
             _ = Task.Run(Stop);
         }
 
-        private async Task UpdateServerBegin(CancellationToken token, WorkRecord workRecord)
+        private async Task UpdateServerBegin(WorkRecord workRecord, CancellationToken token)
         {
             if (workRecord.Response is null)
             {
-                Logger.Log($"Error in Client.UpdateServerBegin: Response is null.");
+                Logger.Log($"Client {clientNumber_} error in UpdateServerBegin: Response is null.");
                 return;
             }
 
@@ -466,19 +446,19 @@ namespace CS.PlasmaClient
 
             if (readKey is null)
             {
-                Logger.Log($"Error in Client.UpdateServerBegin: readKey is null.");
+                Logger.Log($"Client {clientNumber_} error in Client.UpdateServerBegin: readKey is null.");
                 return;
             }
 
             DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
             await Task.Run(async () =>
             {
-                Logger.Log($"Client.UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
+                Logger.Log($"Client {clientNumber_} UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
                 byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);
                 if (updateResult is not null)
                 {
                     // update was handled properly
-                    Logger.Log($"Client.UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
+                    Logger.Log($"Client {clientNumber_} UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
                     return;
                 }
 

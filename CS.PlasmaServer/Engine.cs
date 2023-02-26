@@ -102,7 +102,7 @@ namespace CS.PlasmaServer
                 try
                 {
                     IPEndPoint endpoint = new IPEndPoint(definition_!.IpAddress!, 0);
-                    QuicListener listener = await QuicListener.ListenAsync(
+                    QuicListener? listener = await QuicListener.ListenAsync(
                         new QuicListenerOptions
                         {
                             ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http3 },
@@ -118,15 +118,15 @@ namespace CS.PlasmaServer
                         break;
                     }
 
-                    if (listener is not null
+                    while (listener is not null
                         && listener.LocalEndPoint is not null)
                     {
                         // communicate the port number out via IPC
                         portNumber_ = listener.LocalEndPoint.Port;
                         PortNumberEvent.Set();
-                        QuicConnection conn = await listener.AcceptConnectionAsync(token);
+                        QuicConnection? conn = await listener.AcceptConnectionAsync(token);
 
-                        while (isRunning_
+                        if (isRunning_
                             && conn is not null
                             && !token.IsCancellationRequested)
                         {
@@ -183,6 +183,25 @@ namespace CS.PlasmaServer
 
                                 stream.Close();
                             }
+                            catch (QuicException e)
+                            {
+                                if (e.QuicError == QuicError.ConnectionIdle)
+                                {
+                                    Logger.Log($"Quic server {serverNumber_} connection idle on {conn?.RemoteEndPoint}");
+
+                                    if (conn != null)
+                                    {
+                                        QuicConnection? localConn = conn;
+                                        conn = null;
+
+                                        _ = Task.Run(async () =>
+                                        {
+                                            await localConn.CloseAsync(0x0c);
+                                            await localConn.DisposeAsync();
+                                        });
+                                    }
+                                }
+                            }
                             catch (Exception e)
                             {
                                 Logger.Log($"Quic server {serverNumber_} exception on {conn?.RemoteEndPoint}: {e.Message}");
@@ -199,11 +218,21 @@ namespace CS.PlasmaServer
 
                         if (conn is not null)
                         {
-                            await conn.CloseAsync(0x0c);
-                            await conn.DisposeAsync();
-                        }
+                            QuicConnection? localConn = conn;
+                            conn = null;
 
+                            _ = Task.Run(async () =>
+                            {
+                                await localConn.CloseAsync(0x0c);
+                                await localConn.DisposeAsync();
+                            });
+                        }
+                    }
+
+                    if (listener is not null)
+                    {
                         await listener.DisposeAsync();
+                        listener = null;
                     }
                 }
                 catch (Exception e)

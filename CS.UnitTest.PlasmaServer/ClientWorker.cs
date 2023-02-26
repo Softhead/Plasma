@@ -12,16 +12,22 @@ namespace CS.UnitTest.PlasmaServer
         [TestMethod]
         public async Task OneServerHasBadResult()
         {
+            int clientCount = 10;
+
             // arrange
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");
-            StreamReader configStreamReader = new StreamReader(configStream!);
-            CancellationTokenSource source = new CancellationTokenSource();
+            StreamReader configStreamReader = new(configStream!);
+            CancellationTokenSource source = new();
             Logger.Log("Start servers");
             Server[] servers = ServerHelper.StartServers(source.Token, configStreamReader);
 
-            configStream!.Position = 0;
             Logger.Log("Start client");
-            Client client = await ClientHelper.StartClient(source.Token, configStreamReader);
+            Client[] clients = new Client[clientCount];
+            for (int clientIndex = 0; clientIndex < clients.Length; clientIndex++)
+            {
+                configStream!.Position = 0;
+                clients[clientIndex] = await ClientHelper.StartClient(source.Token, configStreamReader, clientIndex == 0);
+            }
 
             // wait for all servers to start
             while (!servers.Where(o => o.IsRunning is not null).All(o => (bool)o.IsRunning!))
@@ -29,41 +35,49 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
             }
 
-            Parallel.For(0, 2, async (index) =>
+            Parallel.For(0, clientCount, async (index) =>
             {
-                Logger.Log("Start write data");
+                Client client = clients[index];
+                Logger.Log($"Start write data for index {index}");
                 string key = $"key{index}";
                 string value = $"value{index}";
                 DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
-                DatabaseResponse? writeResult = await client.Request(write);
+                DatabaseResponse? writeResult = await client.ProcessRequest(write);
+
+                if (writeResult.MessageType == DatabaseResponseType.Invalid)
+                {
+                    int x = 5;
+                }
 
                 // attest
-                Assert.AreEqual(DatabaseResponseType.Success, writeResult!.MessageType);
+                Assert.AreEqual(DatabaseResponseType.Success, writeResult?.MessageType);
 
                 // act
                 // corrupt the value in one server
-                Logger.Log("Start corrupting data");
+                Logger.Log($"Start corrupting data for index {index}");
                 byte[]? keyBytes = write.GetWriteKeyBytes();
                 servers[0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
 
                 // read the value
-                Logger.Log("Start read data");
+                Logger.Log($"Start read data for index {index}");
                 DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
-                DatabaseResponse? response = await client.Request(read);
+                DatabaseResponse? response = await client.ProcessRequest(read);
 
                 // wait for all workers to complete
                 while (!client.WorkerQueueEmpty)
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(100), source.Token);
                 }
 
                 // assert
-                Logger.Log("Start assert");
+                Logger.Log($"Start assert for index {index}");
                 Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
                 Assert.AreEqual(value, response!.ReadValue());
                 byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
                 Assert.AreEqual(value, Encoding.UTF8.GetString(bytes));
             });
+
+            Logger.Log("End test");
         }
     }
 }

@@ -12,6 +12,7 @@
         public const string ConfigNoEquals = "No equals in configuration.";
         public const string ConfigNoKey = "No key in configuration.";
         public const string DefinitionNotSet = "The database definition is not set.";
+        public const string CannotGetState = "Could not get the client state from the server.";
 
         public static string GetErrorText(ErrorNumber errorNumber)
         {
@@ -33,6 +34,8 @@
                     return ConfigUnrecognizedKey;
                 case ErrorNumber.DefinitionNotSet:
                     return DefinitionNotSet;
+                case ErrorNumber.CannotGetState:
+                    return CannotGetState;
             }
 
             return $"Unrecognized error number: {(int)errorNumber}";
