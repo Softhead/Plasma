@@ -152,10 +152,10 @@ namespace CS.PlasmaClient
             {
                 Logger.Log($"Client {clientNumber_} slot number: {currentSlotInfo.SlotNumber}");
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
-                Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
+                        Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                         byte[]? receivedData = await RequestWithServerQuic(request.Bytes, serverNumber);
                         responses.Add(new ResponseRecord { Data = receivedData, ServerNumber = serverNumber });
                         try

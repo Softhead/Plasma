@@ -35,7 +35,7 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
             }
 
-            Parallel.For(0, clientCount, async (index) =>
+            Parallel.For(0, clientCount, new ParallelOptions { MaxDegreeOfParallelism = clientCount }, async (index) =>
             {
                 Client client = clients[index];
                 Logger.Log($"Start write data for index {index}");
@@ -43,11 +43,6 @@ namespace CS.UnitTest.PlasmaServer
                 string value = $"value{index}";
                 DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
                 DatabaseResponse? writeResult = await client.ProcessRequest(write);
-
-                if (writeResult.MessageType == DatabaseResponseType.Invalid)
-                {
-                    int x = 5;
-                }
 
                 // attest
                 Assert.AreEqual(DatabaseResponseType.Success, writeResult?.MessageType);

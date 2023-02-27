@@ -11,14 +11,14 @@ namespace CS.PlasmaServer
     {
         public ManualResetEvent PortNumberEvent = new ManualResetEvent(false);
 
-        private DatabaseDefinition? definition_ = null;
+        private readonly DatabaseDefinition? definition_ = null;
         private DatabaseState? state_ = null;
         private Task? task_ = null;
         private bool isRunning_ = false;
-        private CancellationTokenSource? source_ = null;
-        private Dictionary<byte[], byte[]>? dictionary_ = null;
+        private readonly CancellationTokenSource source_ = new();
+        private Dictionary<byte[], byte[]> dictionary_ = new(StructuralEqualityComparer<byte[]>.Default);
         private int? portNumber_ = null;
-        private int? serverNumber_ = null;
+        private readonly int? serverNumber_ = null;
 
         private static List<IDatabaseServerProcess?>? processors_ = null;
 
@@ -39,7 +39,7 @@ namespace CS.PlasmaServer
 
         public int? PortNumber { get => portNumber_; }
 
-        public Dictionary<byte[], byte[]>? Dictionary { get => dictionary_; set => dictionary_ = value; }
+        public Dictionary<byte[], byte[]> Dictionary { get => dictionary_; set => dictionary_ = value; }
 
         public ErrorNumber Start()
         {
@@ -49,9 +49,13 @@ namespace CS.PlasmaServer
                 return ErrorNumber.DefinitionNotSet;
             }
 
+            processors_ = Assembly.GetExecutingAssembly()
+                    .GetTypes()
+                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseServerProcess)))
+                    .Select(o => (IDatabaseServerProcess?)Activator.CreateInstance(o))
+                    .ToList();
+
             isRunning_ = true;
-            source_ = new CancellationTokenSource();
-            dictionary_ = new Dictionary<byte[], byte[]>(StructuralEqualityComparer<byte[]>.Default);
 
             task_ = Task.Run(() =>
             {
@@ -64,7 +68,7 @@ namespace CS.PlasmaServer
         public void Stop()
         {
             isRunning_ = false;
-            source_?.Cancel();
+            source_.Cancel();
 
             if (task_ != null)
             {
@@ -72,11 +76,10 @@ namespace CS.PlasmaServer
                 task_ = null;
             }
 
-            source_?.Dispose();
-            source_ = null;
+            source_.Dispose();
         }
 
-        private static X509Certificate2 serverCertificate = new X509Certificate2("c:\\tmp\\iis.pfx", "sofuto");
+        private static X509Certificate2 serverCertificate = new("c:\\tmp\\iis.pfx", "sofuto");
 
         public static Task<QuicServerConnectionOptions> QuicCallback(QuicConnection conn, SslClientHelloInfo info, CancellationToken token)
         {
@@ -94,14 +97,14 @@ namespace CS.PlasmaServer
 
         public async Task RunQuic()
         {
-            CancellationToken token = source_!.Token;
+            CancellationToken token = source_.Token;
 
             while (isRunning_
                 && !token.IsCancellationRequested)
             {
                 try
                 {
-                    IPEndPoint endpoint = new IPEndPoint(definition_!.IpAddress!, 0);
+                    IPEndPoint endpoint = new(definition_!.IpAddress!, 0);
                     QuicListener? listener = await QuicListener.ListenAsync(
                         new QuicListenerOptions
                         {
@@ -150,10 +153,10 @@ namespace CS.PlasmaServer
                                 {
                                     received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
                                 }
-                                DatabaseRequest request = new DatabaseRequest { Bytes = bytesReceived };
+                                DatabaseRequest request = new() { Bytes = bytesReceived };
                                 Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}");
 
-                                DatabaseResponse response = new DatabaseResponse();
+                                DatabaseResponse response = new();
                                 byte[]? bytesReturned;
                                 if (bytesReceived.Length > 0)
                                 {
@@ -246,16 +249,7 @@ namespace CS.PlasmaServer
 
         private byte[]? Process(byte[] bytes)
         {
-            DatabaseRequest request = new DatabaseRequest { Bytes = bytes! };
-
-            if (processors_ is null)
-            {
-                processors_ = Assembly.GetExecutingAssembly()
-                    .GetTypes()
-                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseServerProcess)))
-                    .Select(o => (IDatabaseServerProcess?)Activator.CreateInstance(o))
-                    .ToList();
-            }
+            DatabaseRequest request = new() { Bytes = bytes! };
 
             foreach (IDatabaseServerProcess? processor in processors_)
             {
