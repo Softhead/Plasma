@@ -5,9 +5,9 @@ namespace CS.PlasmaClient
 {
     public class ClientHelper
     {
-        public static async Task<Client> StartClient(CancellationToken token, StreamReader definitionStream, bool receiveServerInformation)
+        public static async Task<Client> StartClientAsync(CancellationToken token, StreamReader definitionStream, bool receiveServerInformation)
         {
-            Client client = new Client();
+            Client client = new();
 
             if (receiveServerInformation)
             {
@@ -18,7 +18,7 @@ namespace CS.PlasmaClient
                 var viewStream = mmf.CreateViewStream();
                 messageHandled.Set();
 
-                ManualResetEvent taskStarted = new ManualResetEvent(false);
+                ManualResetEvent taskStarted = new(false);
                 _ = Task.Run(() =>
                 {
                     bool isTaskStarted = false;
@@ -49,7 +49,7 @@ namespace CS.PlasmaClient
                 taskStarted.WaitOne();
             }
 
-            client.Start(definitionStream);
+            await client.StartAsync(definitionStream);
 
             return client;
         }

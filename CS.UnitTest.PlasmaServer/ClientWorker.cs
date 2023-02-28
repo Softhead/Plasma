@@ -10,7 +10,7 @@ namespace CS.UnitTest.PlasmaServer
     public class ClientWorker : TestBase
     {
         [TestMethod]
-        public async Task OneServerHasBadResult()
+        public async Task OneServerHasBadResultAsync()
         {
             int clientCount = 10;
             ThreadPool.SetMinThreads(10 * clientCount, 10 * clientCount);
@@ -27,23 +27,23 @@ namespace CS.UnitTest.PlasmaServer
             for (int clientIndex = 0; clientIndex < clients.Length; clientIndex++)
             {
                 configStream!.Position = 0;
-                clients[clientIndex] = await ClientHelper.StartClient(source.Token, configStreamReader, clientIndex == 0);
+                clients[clientIndex] = await ClientHelper.StartClientAsync(source.Token, configStreamReader, clientIndex == 0);
             }
 
             // wait for all servers to start
             while (!servers.Where(o => o.IsRunning is not null).All(o => (bool)o.IsRunning!))
             {
-                await Task.Delay(TimeSpan.FromSeconds(0.25), source.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
             }
 
-            Parallel.For(0, clientCount, new ParallelOptions { MaxDegreeOfParallelism = clientCount }, async (index) =>
+            Parallel.For(0, clientCount, async (index) =>
             {
                 Client client = clients[index];
                 Logger.Log($"Start write data for index {index}");
                 string key = $"key{index}";
                 string value = $"value{index}";
                 DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
-                DatabaseResponse? writeResult = await client.ProcessRequest(write);
+                DatabaseResponse? writeResult = await client.ProcessRequestAsync(write);
 
                 // attest
                 Assert.AreEqual(DatabaseResponseType.Success, writeResult?.MessageType);
@@ -57,12 +57,12 @@ namespace CS.UnitTest.PlasmaServer
                 // read the value
                 Logger.Log($"Start read data for index {index}");
                 DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
-                DatabaseResponse? response = await client.ProcessRequest(read);
+                DatabaseResponse? response = await client.ProcessRequestAsync(read);
 
                 // wait for all workers to complete
                 while (!client.WorkerQueueEmpty)
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(100), source.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
                 }
 
                 // assert

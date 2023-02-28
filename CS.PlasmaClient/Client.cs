@@ -1,4 +1,5 @@
 ﻿using CS.PlasmaLibrary;
+using Microsoft.VisualStudio.Threading;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Quic;
@@ -56,7 +57,7 @@ namespace CS.PlasmaClient
             }
         }
 
-        public async Task<ErrorNumber> Start(StreamReader definitionStream)
+        public async Task<ErrorNumber> StartAsync(StreamReader definitionStream)
         {
             if (definition_ is not null)
             {
@@ -74,7 +75,7 @@ namespace CS.PlasmaClient
                     .Select(o => (IDatabaseClientProcess?)Activator.CreateInstance(o))
                     .ToList();
 
-                DatabaseResponse? responseGetState = await ProcessRequest(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
+                DatabaseResponse? responseGetState = await ProcessRequestAsync(new DatabaseRequest { MessageType = DatabaseRequestType.GetState });
                 if (responseGetState?.MessageType != DatabaseResponseType.Success)
                 {
                     return ErrorNumber.CannotGetState;
@@ -84,28 +85,28 @@ namespace CS.PlasmaClient
 
                 task_ = Task.Run(() =>
                 {
-                    _ = RunWorker();
+                    _ = RunWorkerAsync();
                 }, source_.Token);
             }
 
             return result;
         }
 
-        public void Stop()
+        public async Task StopAsync()
         {
             isRunning_ = false;
             _ = Task.Run(source_.Cancel);
 
             if (task_ != null)
             {
-                task_.Wait(TimeSpan.FromSeconds(2));
+                await task_.WaitAsync(TimeSpan.FromSeconds(2));
                 task_ = null;
             }
 
             source_.Dispose();
         }
 
-        public async Task<DatabaseResponse?> ProcessRequest(DatabaseRequest request)
+        public async Task<DatabaseResponse?> ProcessRequestAsync(DatabaseRequest request)
         {
             foreach (IDatabaseClientProcess? processor in processors_!)
             {
@@ -115,7 +116,7 @@ namespace CS.PlasmaClient
                 }
             }
 
-            byte[]? responseData = SendRequest(request);
+            byte[]? responseData = await SendRequestAsync(request);
             if (responseData is not null)
             {
                 return new DatabaseResponse { Bytes = responseData };
@@ -124,7 +125,7 @@ namespace CS.PlasmaClient
             return new DatabaseResponse { MessageType = DatabaseResponseType.Invalid };
         }
 
-        internal byte[]? SendRequest(DatabaseRequest? request, int? overrideClientCommitCount = null, int? overrideServerNumber = null)
+        internal async Task<byte[]?> SendRequestAsync(DatabaseRequest? request, int? overrideClientCommitCount = null, int? overrideServerNumber = null)
         {
             if (request is null
                 || request.Bytes is null
@@ -139,7 +140,7 @@ namespace CS.PlasmaClient
             int clientQueryCount = overrideClientCommitCount ?? definition_.ClientQueryCount;
             int slotCount = 100;// Constant.SlotCount / definition_.ServerCopyCount;
 
-            Barrier? barrier = new(clientCommitCount + 1);
+            AsyncBarrier? barrier = new(clientCommitCount + 1);
             ManualResetEvent startAllRequestsEvent = new(false);
             Task[] tasks = new Task[clientQueryCount];
             ConcurrentBag<ResponseRecord> responses = new();
@@ -156,7 +157,7 @@ namespace CS.PlasmaClient
                     {
                         startAllRequestsEvent.WaitOne();
                         Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
-                        byte[]? receivedData = await RequestWithServerQuic(request.Bytes, serverNumber);
+                        byte[]? receivedData = await RequestWithServerAsync(request.Bytes, serverNumber);
                         responses.Add(new ResponseRecord { Data = receivedData, ServerNumber = serverNumber });
                         try
                         {
@@ -165,7 +166,7 @@ namespace CS.PlasmaClient
                             // instance may have been disposed of already
                             if (barrier is not null)
                             {
-                                barrier.SignalAndWait();
+                                await barrier.SignalAndWait();
                             }
                             else
                             {
@@ -195,11 +196,10 @@ namespace CS.PlasmaClient
             {
                 // since we are waiting for ClientCommitCount responses, this could cause an exception
                 // here because more than the required number of responses was received
-                barrier.SignalAndWait();
+                await barrier.SignalAndWait();
             }
             catch { }
 
-            barrier.Dispose();
             barrier = null;
 
             List<ResponseTally> tallies = new();
@@ -319,7 +319,7 @@ namespace CS.PlasmaClient
             }
         }
 
-        private async Task<byte[]?> RequestWithServerQuic(byte[]? data, int serverNumber)
+        private async Task<byte[]?> RequestWithServerAsync(byte[]? data, int serverNumber)
         {
             if (Definition is null
                 || Definition.IpAddress is null
@@ -383,7 +383,7 @@ namespace CS.PlasmaClient
             return buffer;
         }
 
-        public async Task RunWorker()
+        public async Task RunWorkerAsync()
         {
             if (source_ is null)
             {
@@ -410,7 +410,7 @@ namespace CS.PlasmaClient
                         switch (workRecord.State)
                         {
                             case WorkItemState.UpdateServer:
-                                await UpdateServerBegin(workRecord, token);
+                                await UpdateServerBeginAsync(workRecord, token);
                                 break;
                         }
                     }
@@ -431,10 +431,10 @@ namespace CS.PlasmaClient
                 }
             }
 
-            _ = Task.Run(Stop);
+            _ = Task.Run(StopAsync);
         }
 
-        private async Task UpdateServerBegin(WorkRecord workRecord, CancellationToken token)
+        private async Task UpdateServerBeginAsync(WorkRecord workRecord, CancellationToken token)
         {
             if (workRecord.Response is null)
             {
@@ -454,7 +454,7 @@ namespace CS.PlasmaClient
             await Task.Run(async () =>
             {
                 Logger.Log($"Client {clientNumber_} UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
-                byte[]? updateResult = SendRequest(updateRequest, 1, workRecord.Response.ServerNumber);
+                byte[]? updateResult = await SendRequestAsync(updateRequest, 1, workRecord.Response.ServerNumber);
                 if (updateResult is not null)
                 {
                     // update was handled properly

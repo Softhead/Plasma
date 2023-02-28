@@ -50,29 +50,29 @@ namespace CS.PlasmaServer
             }
 
             processors_ = Assembly.GetExecutingAssembly()
-                    .GetTypes()
-                    .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseServerProcess)))
-                    .Select(o => (IDatabaseServerProcess?)Activator.CreateInstance(o))
-                    .ToList();
+                .GetTypes()
+                .Where(o => o.GetInterfaces().Contains(typeof(IDatabaseServerProcess)))
+                .Select(o => (IDatabaseServerProcess?)Activator.CreateInstance(o))
+                .ToList();
 
             isRunning_ = true;
 
             task_ = Task.Run(() =>
             {
-                _ = RunQuic();
+                _ = RunQuicAsync();
             }, source_.Token);
 
             return ErrorNumber.Success;
         }
 
-        public void Stop()
+        public async Task Stop()
         {
             isRunning_ = false;
             _ = Task.Run(source_.Cancel);
 
             if (task_ != null)
             {
-                task_.Wait(TimeSpan.FromSeconds(2));
+                await task_.WaitAsync(TimeSpan.FromSeconds(2));
                 task_ = null;
             }
 
@@ -95,7 +95,7 @@ namespace CS.PlasmaServer
             });
         }
 
-        public async Task RunQuic()
+        public async Task RunQuicAsync()
         {
             CancellationToken token = source_.Token;
 
@@ -251,7 +251,7 @@ namespace CS.PlasmaServer
         {
             DatabaseRequest request = new() { Bytes = bytes! };
 
-            foreach (IDatabaseServerProcess? processor in processors_)
+            foreach (IDatabaseServerProcess? processor in processors_!)
             {
                 if (processor?.DatabaseRequestType == request.MessageType)
                 {

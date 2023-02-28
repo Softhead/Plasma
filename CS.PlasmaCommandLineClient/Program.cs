@@ -19,15 +19,15 @@ namespace CS.PlasmaCommandLineClient
             }
             Logger.Log("For help, use command 'help'.\n");
 
-            CancellationTokenSource source = new CancellationTokenSource();
+            CancellationTokenSource source = new();
             StreamReader definitionStream = File.OpenText(args[0]);
 
-            using (Client client = await ClientHelper.StartClient(source.Token, definitionStream, true))
+            using (Client client = await ClientHelper.StartClientAsync(source.Token, definitionStream, true))
             {
                 // wait until client is ready
                 while (!client.IsReady)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
                 }
 
                 while (stillGoing_)
@@ -41,7 +41,7 @@ namespace CS.PlasmaCommandLineClient
                     {
                         if (request.MessageType != DatabaseRequestType.Invalid)
                         {
-                            DatabaseResponse? response = await client.ProcessRequest(request);
+                            DatabaseResponse? response = await client.ProcessRequestAsync(request);
                             Logger.Log($"Response: {DecodeResponse(response)}");
                         }
                         else
@@ -55,7 +55,6 @@ namespace CS.PlasmaCommandLineClient
 
         private static DatabaseRequest? DecodeCommand(string? command)
         {
-            DatabaseRequest request = new DatabaseRequest();
             if (string.Compare("ping", command, StringComparison.OrdinalIgnoreCase) == 0)
             {
                 return new DatabaseRequest { MessageType = DatabaseRequestType.Ping };

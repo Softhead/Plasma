@@ -2,7 +2,7 @@
 {
     public class Logger
     {
-        private static List<ILoggerSink> sinks_ = new List<ILoggerSink> { new LoggerSinkConsole() };
+        private static List<ILoggerSink> sinks_ = new() { new LoggerSinkConsole() };
 
         public static List<ILoggerSink> Sinks => sinks_;
 
@@ -22,7 +22,7 @@
             {
                 tasks[index] = sinks_[index].WaitForQueue();
             }
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
         }
     }
 }

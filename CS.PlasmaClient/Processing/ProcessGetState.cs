@@ -18,7 +18,7 @@ namespace CS.PlasmaClient
                 return null;
             }
 
-            byte[]? buffer = client.SendRequest(request, 1);
+            byte[]? buffer = await client.SendRequestAsync(request, 1);
             if (buffer is not null)
             {
                 if (buffer.Length == 1 + Constant.SlotCount * 2)

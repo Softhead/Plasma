@@ -10,7 +10,7 @@ namespace CS.PlasmaClient
         public async Task<DatabaseResponse?> ProcessAsync(Client client, DatabaseRequest request)
         {
             // start server process
-            Process process = new Process
+            Process process = new()
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -22,6 +22,8 @@ namespace CS.PlasmaClient
                 }
             };
             process.Start();
+
+            await process.WaitForExitAsync();
 
             return new DatabaseResponse { MessageType = DatabaseResponseType.Success };
         }

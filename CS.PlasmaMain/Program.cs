@@ -92,13 +92,13 @@ namespace CS.PlasmaMain
                 // wait for at least one server to start
                 while (!servers.Where(o => o.IsRunning is not null).Any(o => (bool)o.IsRunning!))
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
                 }
 
                 // wait for all the servers to end
                 while (!servers.Where(o => o.IsRunning is not null).All(o => (bool)!o.IsRunning!))
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1), source.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
                 }
 
                 return 0;
