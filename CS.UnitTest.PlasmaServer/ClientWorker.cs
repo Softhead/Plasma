@@ -13,6 +13,7 @@ namespace CS.UnitTest.PlasmaServer
         public async Task OneServerHasBadResult()
         {
             int clientCount = 10;
+            ThreadPool.SetMinThreads(10 * clientCount, 10 * clientCount);
 
             // arrange
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");

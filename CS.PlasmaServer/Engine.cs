@@ -68,7 +68,7 @@ namespace CS.PlasmaServer
         public void Stop()
         {
             isRunning_ = false;
-            source_.Cancel();
+            _ = Task.Run(source_.Cancel);
 
             if (task_ != null)
             {
