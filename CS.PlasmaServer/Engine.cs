@@ -57,10 +57,13 @@ namespace CS.PlasmaServer
 
             isRunning_ = true;
 
-            task_ = Task.Run(() =>
+            task_ = Task.Factory.StartNew(() =>
             {
                 _ = RunQuicAsync();
-            }, source_.Token);
+            }, 
+            source_.Token,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
             return ErrorNumber.Success;
         }

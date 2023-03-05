@@ -83,10 +83,13 @@ namespace CS.PlasmaClient
 
                 isRunning_ = true;
 
-                task_ = Task.Run(() =>
+                task_ = Task.Factory.StartNew(() =>
                 {
                     _ = RunWorkerAsync();
-                }, source_.Token);
+                }, 
+                source_.Token,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
             }
 
             return result;
