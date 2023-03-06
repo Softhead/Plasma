@@ -1,6 +1,8 @@
 using CS.PlasmaClient;
 using CS.PlasmaLibrary;
 using CS.PlasmaServer;
+using Microsoft.VisualStudio.Threading;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 
@@ -9,6 +11,10 @@ namespace CS.UnitTest.PlasmaServer
     [TestClass]
     public class ClientWorker : TestBase
     {
+        Client[]? clients;
+        Server[]? servers;
+        CancellationTokenSource? source;
+
         [TestMethod]
         public async Task OneServerHasBadResultAsync()
         {
@@ -18,12 +24,12 @@ namespace CS.UnitTest.PlasmaServer
             // arrange
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");
             StreamReader configStreamReader = new(configStream!);
-            CancellationTokenSource source = new();
+            source = new();
             Logger.Log("Start servers");
-            Server[] servers = ServerHelper.StartServers(source.Token, configStreamReader);
+            servers = ServerHelper.StartServers(source.Token, configStreamReader);
 
             Logger.Log("Start client");
-            Client[] clients = new Client[clientCount];
+            clients = new Client[clientCount];
             for (int clientIndex = 0; clientIndex < clients.Length; clientIndex++)
             {
                 configStream!.Position = 0;
@@ -36,44 +42,67 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
             }
 
-            Parallel.For(0, clientCount, async (index) =>
-            {
-                Client client = clients[index];
-                Logger.Log($"Start write data for index {index}");
-                string key = $"key{index}";
-                string value = $"value{index}";
-                DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
-                DatabaseResponse? writeResult = await client.ProcessRequestAsync(write);
+            ConcurrentBag<Task> tasks = new();
 
-                // attest
-                Assert.AreEqual(DatabaseResponseType.Success, writeResult?.MessageType);
-
-                // act
-                // corrupt the value in one server
-                Logger.Log($"Start corrupting data for index {index}");
-                byte[]? keyBytes = write.GetWriteKeyBytes();
-                servers[0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
-
-                // read the value
-                Logger.Log($"Start read data for index {index}");
-                DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
-                DatabaseResponse? response = await client.ProcessRequestAsync(read);
-
-                // wait for all workers to complete
-                while (!client.WorkerQueueEmpty)
+            Parallel.For(
+                0,
+                clientCount,
+                (index) =>
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
+                    int localIndex = index;
+                    tasks.Add(
+                        Task.Factory.StartNew(
+                            async () =>
+                            {
+                                await WorkAsync(localIndex);
+                            },
+                            source.Token,
+                            TaskCreationOptions.LongRunning,
+                            TaskScheduler.Default
+                        )
+                    );
                 }
+            );
 
-                // assert
-                Logger.Log($"Start assert for index {index}");
-                Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
-                Assert.AreEqual(value, response!.ReadValue());
-                byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
-                Assert.AreEqual(value, Encoding.UTF8.GetString(bytes));
-            });
-
+            await Task.WhenAll(tasks);
             Logger.Log("End test");
+        }
+
+        private async Task WorkAsync(int index)
+        {
+            Client client = clients![index];
+            Logger.Log($"Start write data for index {index}");
+            string key = $"key{index}";
+            string value = $"value{index}";
+            DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
+            DatabaseResponse? writeResult = await client.ProcessRequestAsync(write);
+
+            // attest
+            Assert.AreEqual(DatabaseResponseType.Success, writeResult?.MessageType);
+
+            // act
+            // corrupt the value in one server
+            Logger.Log($"Start corrupting data for index {index}");
+            byte[]? keyBytes = write.GetWriteKeyBytes();
+            servers![0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
+
+            // read the value
+            Logger.Log($"Start read data for index {index}");
+            DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
+            DatabaseResponse? response = await client.ProcessRequestAsync(read);
+
+            // wait for all workers to complete
+            while (!client.WorkerQueueEmpty)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), source!.Token);
+            }
+
+            // assert
+            Logger.Log($"Start assert for index {index}");
+            Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
+            Assert.AreEqual(value, response!.ReadValue());
+            byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];
+            Assert.AreEqual(value, Encoding.UTF8.GetString(bytes));
         }
     }
 }
