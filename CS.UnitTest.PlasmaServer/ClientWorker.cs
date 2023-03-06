@@ -2,7 +2,6 @@ using CS.PlasmaClient;
 using CS.PlasmaLibrary;
 using CS.PlasmaServer;
 using Microsoft.VisualStudio.Threading;
-using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 
@@ -42,27 +41,23 @@ namespace CS.UnitTest.PlasmaServer
                 await Task.Delay(TimeSpan.FromMilliseconds(10), source.Token);
             }
 
-            ConcurrentBag<Task> tasks = new();
+            List<Task> tasks = new();
 
-            Parallel.For(
-                0,
-                clientCount,
-                (index) =>
-                {
-                    int localIndex = index;
-                    tasks.Add(
-                        Task.Factory.StartNew(
-                            async () =>
-                            {
-                                await WorkAsync(localIndex);
-                            },
-                            source.Token,
-                            TaskCreationOptions.LongRunning,
-                            TaskScheduler.Default
-                        )
-                    );
-                }
-            );
+            for (int index = 0; index < clientCount; index++)
+            {
+                int localIndex = index;
+                tasks.Add(
+                    Task.Factory.StartNew(
+                        async () =>
+                        {
+                            await WorkAsync(localIndex);
+                        },
+                        source.Token,
+                        TaskCreationOptions.None,
+                        TaskScheduler.Default
+                    )
+                );
+            }
 
             await Task.WhenAll(tasks);
             Logger.Log("End test");
