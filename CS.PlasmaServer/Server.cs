@@ -107,11 +107,11 @@ namespace CS.PlasmaServer
             return ErrorNumber.Success;
         }
 
-        public void Stop()
+        public async Task Stop()
         {
             if (engine_ is not null)
             {
-                engine_!.Stop();
+                await engine_.Stop();
                 engine_ = null;
             }
         }

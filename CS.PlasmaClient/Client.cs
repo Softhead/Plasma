@@ -86,7 +86,7 @@ namespace CS.PlasmaClient
                 task_ = Task.Factory.StartNew(() =>
                 {
                     _ = RunWorkerAsync();
-                }, 
+                },
                 source_.Token,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
@@ -141,9 +141,9 @@ namespace CS.PlasmaClient
 
             int clientCommitCount = overrideClientCommitCount ?? definition_.ClientCommitCount;
             int clientQueryCount = overrideClientCommitCount ?? definition_.ClientQueryCount;
-            int slotCount = 100;// Constant.SlotCount / definition_.ServerCopyCount;
+            int slotCount = 100; // TODO: use whole range of Constant.SlotCount / definition_.ServerCopyCount;
 
-            AsyncBarrier? barrier = new(clientCommitCount + 1);
+            Barrier? barrier = new(clientCommitCount + 1);
             ManualResetEvent startAllRequestsEvent = new(false);
             Task[] tasks = new Task[clientQueryCount];
             ConcurrentBag<ResponseRecord> responses = new();
@@ -154,32 +154,33 @@ namespace CS.PlasmaClient
 
             for (int index = 0; index < clientQueryCount; index++)
             {
-                Logger.Log($"Client {clientNumber_} slot number: {currentSlotInfo.SlotNumber}");
+                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber}");
                 int serverNumber = overrideServerNumber ?? state_.Slots[currentSlotInfo.SlotNumber].ServerNumber;
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
-                        Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
+//                        Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
                         byte[]? receivedData = await RequestWithServerAsync(request.Bytes, serverNumber);
                         responses.Add(new ResponseRecord { Data = receivedData, ServerNumber = serverNumber });
                         try
                         {
-                            // since we are waiting for ClientCommitCount responses, this could cause an exception
-                            // here because more than the required number of responses was received, or the barrier
-                            // instance may have been disposed of already
                             if (barrier is not null)
                             {
-                                await barrier.SignalAndWait();
+                                barrier.SignalAndWait();
+//                                Logger.Log($"Client {clientNumber_} server {serverNumber} signalled barrier.");
                             }
                             else
                             {
-                                Logger.Log($"Client {clientNumber_} excess response from server {serverNumber}.");
+                                Logger.Log($"Client {clientNumber_} server {serverNumber} skipped signalling barrier.");
                             }
                         }
-                        catch { }
+                        catch 
+                        {
+                            Logger.Log($"Client {clientNumber_} server {serverNumber} excess response from server {serverNumber}.");
+                        }
 
                         DatabaseResponse response = new() { Bytes = receivedData };
-                        Logger.Log($"Client {clientNumber_} received {receivedData?.Length} bytes from server {serverNumber}.  {response}");
+                        Logger.Log($"Client {clientNumber_} server {serverNumber} received {receivedData?.Length} bytes.  {response}");
                     }, source_.Token);
 
                 if (index < clientQueryCount - 1)
@@ -199,11 +200,14 @@ namespace CS.PlasmaClient
             {
                 // since we are waiting for ClientCommitCount responses, this could cause an exception
                 // here because more than the required number of responses was received
-                await barrier.SignalAndWait();
+                barrier.SignalAndWait();
+                barrier = null;
+//                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} signalled main barrier.");
             }
-            catch { }
-
-            barrier = null;
+            catch 
+            {
+                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} excepted main barrier.");
+            }
 
             List<ResponseTally> tallies = new();
             int count = 0;
@@ -333,12 +337,10 @@ namespace CS.PlasmaClient
 
             CancellationToken token = new();
             int port = ServerPortDictionary[serverNumber];
-            Logger.Log($"Client {clientNumber_} using port {port}.");
-            QuicConnection? conn = null;
 
             IPEndPoint endpoint = new(Definition.IpAddress, port);
-            Logger.Log($"Client {clientNumber_} connection to server {serverNumber}, creating endpoint to port {endpoint.Port}.");
-            conn = await QuicConnection.ConnectAsync(
+//            Logger.Log($"Client {clientNumber_} starting connection to server {serverNumber}, creating endpoint to port {endpoint.Port}.");
+            QuicConnection? conn = await QuicConnection.ConnectAsync(
                 new QuicClientConnectionOptions
                 {
                     RemoteEndPoint = endpoint,
@@ -348,40 +350,56 @@ namespace CS.PlasmaClient
                     MaxInboundUnidirectionalStreams = 10,
                     MaxInboundBidirectionalStreams = 100
                 }, token);
+//            Logger.Log($"Client {clientNumber_} got connection to server {serverNumber}.");
 
-            QuicStream stream = await conn!.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
-
-            // message format is 4 bytes message length, followed by data
-            byte[] buffer = new byte[data.Length + 4];
-            BitConverter.GetBytes(data.Length).CopyTo(buffer, 0);
-            data.CopyTo(buffer, 4);
-            await stream.WriteAsync(buffer, token);
-            stream.CompleteWrites();
-
-            // read response length
-            buffer = new byte[4];
-            await stream.ReadAsync(buffer, token);
-
-            // read the response
-            int length = BitConverter.ToInt32(buffer, 0);
-            buffer = new byte[length];
-            int received = 0;
-            bool stillGoing = true;
-            while (stillGoing)
+            byte[]? buffer = null;
+            if (conn is not null)
             {
-                int currentReceived = await stream.ReadAsync(buffer.AsMemory(received, length - received), token);
-                received += currentReceived;
-                if (received == length)
+                QuicStream? stream = await conn.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+//                Logger.Log($"Client {clientNumber_} got stream to server {serverNumber}.");
+
+                if (stream is not null)
                 {
-                    stillGoing = false;
+                    // message format is 4 bytes message length, followed by data
+                    buffer = new byte[data.Length + 4];
+                    BitConverter.GetBytes(data.Length).CopyTo(buffer, 0);
+                    data.CopyTo(buffer, 4);
+                    await stream.WriteAsync(buffer, token);
+//                    Logger.Log($"Client {clientNumber_} wrote length to server {serverNumber}.");
+
+                    // read response length
+                    buffer = new byte[4];
+                    await stream.ReadAsync(buffer, token);
+//                    Logger.Log($"Client {clientNumber_} read length from server {serverNumber}. Length {BitConverter.ToInt32(buffer, 0)}");
+
+                    // read the response
+                    int length = BitConverter.ToInt32(buffer, 0);
+                    buffer = new byte[length];
+                    int received = 0;
+                    bool stillGoing = true;
+                    while (stillGoing)
+                    {
+                        int currentReceived = await stream.ReadAsync(buffer.AsMemory(received, length - received), token);
+                        received += currentReceived;
+                        if (received == length)
+                        {
+                            stillGoing = false;
+                        }
+                    }
+                    string bufferString = Convert.ToHexString(buffer);
+                    if (bufferString.Length > 30)
+                    {
+                        bufferString = bufferString.Substring(0, 30);
+                    }
+//                    Logger.Log($"Client {clientNumber_} read data from server {serverNumber}. Buffer {bufferString}");
+
+                    await stream.DisposeAsync();
                 }
+
+                await conn.DisposeAsync();
             }
 
-            _ = Task.Run(async () =>
-            {
-                stream.Close();
-                await stream.DisposeAsync();
-            });
+//            Logger.Log($"Client {clientNumber_} closing server {serverNumber}.");
 
             return buffer;
         }

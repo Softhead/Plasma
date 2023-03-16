@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.WebSockets;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
 
 namespace CS.PlasmaLibrary
 {
@@ -15,9 +10,9 @@ namespace CS.PlasmaLibrary
             if (bytes?.Length > 1)
             {
                 data = Encoding.UTF8.GetString(bytes.AsSpan().Slice(1));
-                if (data.Length > 10)
+                if (data.Length > 30)
                 {
-                    data = $"{data.Substring(0, 10)}...";
+                    data = $"{data.Substring(0, 30)}...";
                 }
             }
             return $"Command: '{messageType}' Data: '{data}'";

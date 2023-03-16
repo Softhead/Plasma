@@ -82,7 +82,7 @@ namespace CS.PlasmaServer
             source_.Dispose();
         }
 
-        private static X509Certificate2 serverCertificate = new("c:\\tmp\\iis.pfx", "sofuto");
+        private static readonly X509Certificate2 serverCertificate = new("c:\\tmp\\iis.pfx", "sofuto");
 
         public static Task<QuicServerConnectionOptions> QuicCallback(QuicConnection conn, SslClientHelloInfo info, CancellationToken token)
         {
@@ -184,10 +184,7 @@ namespace CS.PlasmaServer
                                 BitConverter.GetBytes(bytesReturned.Length).CopyTo(buffer, 0);
                                 bytesReturned.CopyTo(buffer, 4);
                                 stream.Write(buffer, 0, buffer.Length);
-                                stream.CompleteWrites();
                                 Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}");
-
-                                stream.Close();
                             }
                             catch (QuicException e)
                             {
@@ -195,16 +192,10 @@ namespace CS.PlasmaServer
                                 {
                                     Logger.Log($"Quic server {serverNumber_} connection idle on {conn?.RemoteEndPoint}");
 
-                                    if (conn != null)
+                                    if (conn is not null)
                                     {
-                                        QuicConnection? localConn = conn;
+                                        await conn.DisposeAsync();
                                         conn = null;
-
-                                        _ = Task.Run(async () =>
-                                        {
-                                            await localConn.CloseAsync(0x0c);
-                                            await localConn.DisposeAsync();
-                                        });
                                     }
                                 }
                             }
@@ -219,19 +210,13 @@ namespace CS.PlasmaServer
                                     await stream.DisposeAsync();
                                     stream = null;
                                 }
+
+                                if (conn is not null)
+                                {
+                                    await conn.DisposeAsync();
+                                    conn = null;
+                                }
                             }
-                        }
-
-                        if (conn is not null)
-                        {
-                            QuicConnection? localConn = conn;
-                            conn = null;
-
-                            _ = Task.Run(async () =>
-                            {
-                                await localConn.CloseAsync(0x0c);
-                                await localConn.DisposeAsync();
-                            });
                         }
                     }
 
@@ -247,7 +232,7 @@ namespace CS.PlasmaServer
                 }
             }
 
-            _ = Task.Run(Stop);
+            await Stop();
         }
 
         private byte[]? Process(byte[] bytes)

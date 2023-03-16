@@ -8,7 +8,7 @@ using System.Text;
 namespace CS.UnitTest.PlasmaServer
 {
     [TestClass]
-    public class ClientWorker : TestBase
+    public class OneServerHasBadResult : TestBase
     {
         Client[]? clients;
         Server[]? servers;
@@ -18,7 +18,7 @@ namespace CS.UnitTest.PlasmaServer
         public async Task OneServerHasBadResultAsync()
         {
             int clientCount = 10;
-            ThreadPool.SetMinThreads(10 * clientCount, 10 * clientCount);
+            ThreadPool.SetMinThreads(clientCount, clientCount);
 
             // arrange
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");
@@ -50,7 +50,7 @@ namespace CS.UnitTest.PlasmaServer
                     Task.Factory.StartNew(
                         async () =>
                         {
-                            await WorkAsync(localIndex);
+                            await OneServerHasBadResultWorkAsync(localIndex);
                         },
                         source.Token,
                         TaskCreationOptions.None,
@@ -63,7 +63,7 @@ namespace CS.UnitTest.PlasmaServer
             Logger.Log("End test");
         }
 
-        private async Task WorkAsync(int index)
+        private async Task OneServerHasBadResultWorkAsync(int index)
         {
             Client client = clients![index];
             Logger.Log($"Start write data for index {index}");
