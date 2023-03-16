@@ -159,7 +159,7 @@ namespace CS.PlasmaClient
                 tasks[index] = Task.Run(async () =>
                     {
                         startAllRequestsEvent.WaitOne();
-//                        Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}");
+                        Logger.Log($"Client {clientNumber_} sending {request.Bytes.Length} bytes to server {serverNumber}.  {request}", LoggingLevel.Debug);
                         byte[]? receivedData = await RequestWithServerAsync(request.Bytes, serverNumber);
                         responses.Add(new ResponseRecord { Data = receivedData, ServerNumber = serverNumber });
                         try
@@ -167,7 +167,7 @@ namespace CS.PlasmaClient
                             if (barrier is not null)
                             {
                                 barrier.SignalAndWait();
-//                                Logger.Log($"Client {clientNumber_} server {serverNumber} signalled barrier.");
+                                Logger.Log($"Client {clientNumber_} server {serverNumber} signalled barrier.", LoggingLevel.Debug);
                             }
                             else
                             {
@@ -176,11 +176,11 @@ namespace CS.PlasmaClient
                         }
                         catch 
                         {
-                            Logger.Log($"Client {clientNumber_} server {serverNumber} excess response from server {serverNumber}.");
+                            Logger.Log($"Client {clientNumber_} server {serverNumber} excess response from server {serverNumber}.", LoggingLevel.Error);
                         }
 
                         DatabaseResponse response = new() { Bytes = receivedData };
-                        Logger.Log($"Client {clientNumber_} server {serverNumber} received {receivedData?.Length} bytes.  {response}");
+                        Logger.Log($"Client {clientNumber_} server {serverNumber} received {receivedData?.Length} bytes.  {response}", LoggingLevel.Debug);
                     }, source_.Token);
 
                 if (index < clientQueryCount - 1)
@@ -202,11 +202,11 @@ namespace CS.PlasmaClient
                 // here because more than the required number of responses was received
                 barrier.SignalAndWait();
                 barrier = null;
-//                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} signalled main barrier.");
+                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} signalled main barrier.", LoggingLevel.Debug);
             }
             catch 
             {
-                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} excepted main barrier.");
+                Logger.Log($"Client {clientNumber_} slot number {currentSlotInfo.SlotNumber} excepted main barrier.", LoggingLevel.Error);
             }
 
             List<ResponseTally> tallies = new();
@@ -269,7 +269,7 @@ namespace CS.PlasmaClient
                         {
                             rr = Encoding.UTF8.GetString(tally.Value.AsSpan().Slice(1));
                         }
-                        Logger.Log($"Client {clientNumber_} error tally state: '{tally.Value?[0]}' value: '{rr}'");
+                        Logger.Log($"Client {clientNumber_} error tally state: '{tally.Value?[0]}' value: '{rr}'", LoggingLevel.Debug);
                     }
                 }
             }
@@ -301,7 +301,7 @@ namespace CS.PlasmaClient
 
                         if (tally.Response is not null)
                         {
-                            Logger.Log($"Client {clientNumber_} unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.");
+                            Logger.Log($"Client {clientNumber_} unmatched response for reading key {readKey} from server {tally.Response.ServerNumber}; updating server.", LoggingLevel.Warning);
                             workQueue_.Enqueue(new WorkRecord
                             {
                                 Request = request,
@@ -316,12 +316,12 @@ namespace CS.PlasmaClient
 
             if (passedQuorum)
             {
-                Logger.Log($"Client {clientNumber_} passed quorum with {maxCount} matching responses out of {count}.");
+                Logger.Log($"Client {clientNumber_} passed quorum with {maxCount} matching responses out of {count}.", LoggingLevel.Debug);
                 return maxTally?.Value;
             }
             else
             {
-                Logger.Log($"Client {clientNumber_} failed quorum with {maxCount} matching responses out of {count}.");
+                Logger.Log($"Client {clientNumber_} failed quorum with {maxCount} matching responses out of {count}.", LoggingLevel.Debug);
                 return new DatabaseResponse { MessageType = DatabaseResponseType.QuorumFailed }.Bytes;
             }
         }
@@ -339,7 +339,7 @@ namespace CS.PlasmaClient
             int port = ServerPortDictionary[serverNumber];
 
             IPEndPoint endpoint = new(Definition.IpAddress, port);
-//            Logger.Log($"Client {clientNumber_} starting connection to server {serverNumber}, creating endpoint to port {endpoint.Port}.");
+            Logger.Log($"Client {clientNumber_} starting connection to server {serverNumber}, creating endpoint to port {endpoint.Port}.", LoggingLevel.Debug);
             QuicConnection? conn = await QuicConnection.ConnectAsync(
                 new QuicClientConnectionOptions
                 {
@@ -350,13 +350,13 @@ namespace CS.PlasmaClient
                     MaxInboundUnidirectionalStreams = 10,
                     MaxInboundBidirectionalStreams = 100
                 }, token);
-//            Logger.Log($"Client {clientNumber_} got connection to server {serverNumber}.");
+            Logger.Log($"Client {clientNumber_} got connection to server {serverNumber}.", LoggingLevel.Debug);
 
             byte[]? buffer = null;
             if (conn is not null)
             {
                 QuicStream? stream = await conn.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
-//                Logger.Log($"Client {clientNumber_} got stream to server {serverNumber}.");
+                Logger.Log($"Client {clientNumber_} got stream to server {serverNumber}.", LoggingLevel.Debug);
 
                 if (stream is not null)
                 {
@@ -365,12 +365,12 @@ namespace CS.PlasmaClient
                     BitConverter.GetBytes(data.Length).CopyTo(buffer, 0);
                     data.CopyTo(buffer, 4);
                     await stream.WriteAsync(buffer, token);
-//                    Logger.Log($"Client {clientNumber_} wrote length to server {serverNumber}.");
+                    Logger.Log($"Client {clientNumber_} wrote length to server {serverNumber}.", LoggingLevel.Debug);
 
                     // read response length
                     buffer = new byte[4];
                     await stream.ReadAsync(buffer, token);
-//                    Logger.Log($"Client {clientNumber_} read length from server {serverNumber}. Length {BitConverter.ToInt32(buffer, 0)}");
+                    Logger.Log($"Client {clientNumber_} read length from server {serverNumber}. Length {BitConverter.ToInt32(buffer, 0)}", LoggingLevel.Debug);
 
                     // read the response
                     int length = BitConverter.ToInt32(buffer, 0);
@@ -391,7 +391,7 @@ namespace CS.PlasmaClient
                     {
                         bufferString = bufferString.Substring(0, 30);
                     }
-//                    Logger.Log($"Client {clientNumber_} read data from server {serverNumber}. Buffer {bufferString}");
+                    Logger.Log($"Client {clientNumber_} read data from server {serverNumber}. Buffer {bufferString}", LoggingLevel.Debug);
 
                     await stream.DisposeAsync();
                 }
@@ -399,7 +399,7 @@ namespace CS.PlasmaClient
                 await conn.DisposeAsync();
             }
 
-//            Logger.Log($"Client {clientNumber_} closing server {serverNumber}.");
+            Logger.Log($"Client {clientNumber_} closing server {serverNumber}.", LoggingLevel.Debug);
 
             return buffer;
         }
@@ -421,7 +421,7 @@ namespace CS.PlasmaClient
                     workComplete_.Reset();
                     if (workQueue_.TryDequeue(out WorkRecord? workRecord))
                     {
-                        Logger.Log($"Client {clientNumber_} worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.");
+                        Logger.Log($"Client {clientNumber_} worker dequeued work record with id '{workRecord.Id}' with retry count {workRecord.RetryCount} and state {workRecord.State}.", LoggingLevel.Debug);
 
                         if (workRecord.RetryCount > WORKER_MAX_RETRY_COUNT)
                         {
@@ -459,7 +459,7 @@ namespace CS.PlasmaClient
         {
             if (workRecord.Response is null)
             {
-                Logger.Log($"Client {clientNumber_} error in UpdateServerBegin: Response is null.");
+                Logger.Log($"Client {clientNumber_} error in UpdateServerBegin: Response is null.", LoggingLevel.Error);
                 return;
             }
 
@@ -467,19 +467,19 @@ namespace CS.PlasmaClient
 
             if (readKey is null)
             {
-                Logger.Log($"Client {clientNumber_} error in Client.UpdateServerBegin: readKey is null.");
+                Logger.Log($"Client {clientNumber_} error in Client.UpdateServerBegin: readKey is null.", LoggingLevel.Error);
                 return;
             }
 
             DatabaseRequest updateRequest = DatabaseRequestHelper.WriteRequest(readKey, workRecord.Value);
             await Task.Run(async () =>
             {
-                Logger.Log($"Client {clientNumber_} UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.");
+                Logger.Log($"Client {clientNumber_} UpdateServerBegin sending update request to server number {workRecord.Response.ServerNumber}.", LoggingLevel.Debug);
                 byte[]? updateResult = await SendRequestAsync(updateRequest, 1, workRecord.Response.ServerNumber);
                 if (updateResult is not null)
                 {
                     // update was handled properly
-                    Logger.Log($"Client {clientNumber_} UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.");
+                    Logger.Log($"Client {clientNumber_} UpdateServerBegin update request handled properly by server number {workRecord.Response.ServerNumber}.", LoggingLevel.Debug);
                     return;
                 }
 

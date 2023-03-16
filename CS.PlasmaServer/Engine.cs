@@ -157,7 +157,7 @@ namespace CS.PlasmaServer
                                     received = await stream.ReadAsync(bytesReceived.AsMemory(received, bytesReceived.Length - received), token);
                                 }
                                 DatabaseRequest request = new() { Bytes = bytesReceived };
-                                Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}");
+                                Logger.Log($"Quic server {serverNumber_} received {length} bytes from {conn.RemoteEndPoint}  {request}", LoggingLevel.Debug);
 
                                 DatabaseResponse response = new();
                                 byte[]? bytesReturned;
@@ -184,13 +184,13 @@ namespace CS.PlasmaServer
                                 BitConverter.GetBytes(bytesReturned.Length).CopyTo(buffer, 0);
                                 bytesReturned.CopyTo(buffer, 4);
                                 stream.Write(buffer, 0, buffer.Length);
-                                Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}");
+                                Logger.Log($"Quic server {serverNumber_} sent {bytesReturned.Length} bytes to {conn.RemoteEndPoint}  {response}", LoggingLevel.Debug);
                             }
                             catch (QuicException e)
                             {
                                 if (e.QuicError == QuicError.ConnectionIdle)
                                 {
-                                    Logger.Log($"Quic server {serverNumber_} connection idle on {conn?.RemoteEndPoint}");
+                                    Logger.Log($"Quic server {serverNumber_} connection idle on {conn?.RemoteEndPoint}", LoggingLevel.Error);
 
                                     if (conn is not null)
                                     {
@@ -201,7 +201,7 @@ namespace CS.PlasmaServer
                             }
                             catch (Exception e)
                             {
-                                Logger.Log($"Quic server {serverNumber_} exception on {conn?.RemoteEndPoint}: {e.Message}");
+                                Logger.Log($"Quic server {serverNumber_} exception on {conn?.RemoteEndPoint}: {e.Message}", LoggingLevel.Error);
                             }
                             finally
                             {
@@ -228,7 +228,7 @@ namespace CS.PlasmaServer
                 }
                 catch (Exception e)
                 {
-                    Logger.Log($"Error in Engine.RunQuic: {e}");
+                    Logger.Log($"Error in Engine.RunQuic: {e}", LoggingLevel.Error);
                 }
             }
 

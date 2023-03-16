@@ -3,11 +3,17 @@
     public class Logger
     {
         private static List<ILoggerSink> sinks_ = new() { new LoggerSinkConsole() };
+        public static LoggingLevel LoggingLevel { get; set; } = LoggingLevel.Error;
 
         public static List<ILoggerSink> Sinks => sinks_;
 
-        public static void Log(string message)
+        public static void Log(string message, LoggingLevel loggingLevel = LoggingLevel.Info)
         {
+            if (LoggingLevel != LoggingLevel.Off && loggingLevel > LoggingLevel)
+            {
+                return;
+            }
+
             foreach (var sink in sinks_)
             {
                 sink.Write(message);

@@ -44,7 +44,7 @@ namespace CS.PlasmaServer
                 _ = Task.Run(() =>
                 {
                     serverLocal.PortNumberEvent.WaitOne();
-                    Logger.Log($"Server: {serverLocal.ServerNumber} Port: {serverLocal.PortNumber}");
+                    Logger.Log($"Server: {serverLocal.ServerNumber} Port: {serverLocal.PortNumber}", LoggingLevel.Debug);
 
                     messageHandled.WaitOne();
                     string messageString = $"{serverLocal.ServerNumber} {serverLocal.PortNumber}";

@@ -18,16 +18,16 @@ namespace CS.UnitTest.PlasmaServer
         public async Task OneServerHasBadResultAsync()
         {
             int clientCount = 10;
-            ThreadPool.SetMinThreads(clientCount, clientCount);
+            ThreadPool.SetMinThreads(clientCount * 2, clientCount * 2);
 
             // arrange
             Stream? configStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CS.UnitTest.PlasmaServer.local.cfg");
             StreamReader configStreamReader = new(configStream!);
             source = new();
-            Logger.Log("Start servers");
+            Logger.Log("Start servers", LoggingLevel.Always);
             servers = ServerHelper.StartServers(source.Token, configStreamReader);
 
-            Logger.Log("Start client");
+            Logger.Log("Start client", LoggingLevel.Always);
             clients = new Client[clientCount];
             for (int clientIndex = 0; clientIndex < clients.Length; clientIndex++)
             {
@@ -60,13 +60,13 @@ namespace CS.UnitTest.PlasmaServer
             }
 
             await Task.WhenAll(tasks);
-            Logger.Log("End test");
+            Logger.Log("End test", LoggingLevel.Always);
         }
 
         private async Task OneServerHasBadResultWorkAsync(int index)
         {
             Client client = clients![index];
-            Logger.Log($"Start write data for index {index}");
+            Logger.Log($"Start write data for index {index}", LoggingLevel.Always);
             string key = $"key{index}";
             string value = $"value{index}";
             DatabaseRequest write = DatabaseRequestHelper.WriteRequest(key, value);
@@ -77,12 +77,12 @@ namespace CS.UnitTest.PlasmaServer
 
             // act
             // corrupt the value in one server
-            Logger.Log($"Start corrupting data for index {index}");
+            Logger.Log($"Start corrupting data for index {index}", LoggingLevel.Always);
             byte[]? keyBytes = write.GetWriteKeyBytes();
             servers![0].Engine!.Dictionary![keyBytes!] = Encoding.UTF8.GetBytes("corrupted value");
 
             // read the value
-            Logger.Log($"Start read data for index {index}");
+            Logger.Log($"Start read data for index {index}", LoggingLevel.Always);
             DatabaseRequest read = DatabaseRequestHelper.ReadRequest(key);
             DatabaseResponse? response = await client.ProcessRequestAsync(read);
 
@@ -93,7 +93,7 @@ namespace CS.UnitTest.PlasmaServer
             }
 
             // assert
-            Logger.Log($"Start assert for index {index}");
+            Logger.Log($"Start assert for index {index}", LoggingLevel.Always);
             Assert.AreEqual(DatabaseResponseType.Success, response!.MessageType);
             Assert.AreEqual(value, response!.ReadValue());
             byte[] bytes = servers[0]!.Engine!.Dictionary![keyBytes!];

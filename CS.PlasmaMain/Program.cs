@@ -9,6 +9,8 @@ namespace CS.PlasmaMain
         static async Task<int> Main(string[] args)
         {
             Logger.Sinks.Add(new LoggerSinkFile(@"c:\tmp\PlasmaServer.log"));
+            Logger.LoggingLevel = LoggingLevel.Info;
+
             CancellationTokenSource source = new CancellationTokenSource();
             Logger.Log("Plasma Server");
 

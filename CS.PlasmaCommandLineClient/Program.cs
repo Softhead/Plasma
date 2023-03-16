@@ -11,6 +11,7 @@ namespace CS.PlasmaCommandLineClient
         static async Task Main(string[] args)
         {
             Logger.Sinks.Add(new LoggerSinkFile(@"c:\tmp\PlasmaClient.log"));
+            Logger.LoggingLevel = LoggingLevel.Info;
 
             if (args.Length != 1)
             {
