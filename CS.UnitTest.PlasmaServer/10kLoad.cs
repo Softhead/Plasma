@@ -92,7 +92,7 @@ namespace CS.UnitTest.PlasmaServer
                 DatabaseResponse? readResponse = await client.ProcessRequestAsync(readRequest);
                 Assert.AreEqual(DatabaseResponseType.Success, readResponse!.MessageType);
                 Assert.IsTrue(expectedValue.Span.SequenceEqual(readResponse.Bytes!.AsSpan().Slice(11)));
-                IncrementCounter(expectedValue.Span, 0);
+                IncrementCounter(expectedValue.Span);
                 IncrementCounter(readRequest, readLength - 4);
             }
         }
@@ -100,10 +100,10 @@ namespace CS.UnitTest.PlasmaServer
         private static void IncrementCounter(DatabaseRequest request, int startIndex)
         {
             Span<byte> number = request.Bytes.AsSpan().Slice(startIndex, 4);
-            IncrementCounter(number, startIndex);
+            IncrementCounter(number);
         }
 
-        private static void IncrementCounter(Span<byte> number, int startIndex)
+        private static void IncrementCounter(Span<byte> number)
         {
             for (int index = 3; index >= 0; index--)
             {
